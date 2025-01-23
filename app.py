@@ -465,7 +465,7 @@ def select_backdrop():
         app.logger.exception("Unexpected error in select_backdrop route: %s", e)
         return "Internal Server Error", 500
     
-# Route for manually confirming the directory and saving the backdrop
+## Route for manually confirming the directory and saving the backdrop
 @app.route('/confirm_backdrop_directory', methods=['POST'])
 def confirm_backdrop_directory():
     # Extract form data for manual backdrop directory selection
@@ -507,9 +507,17 @@ def confirm_backdrop_directory():
     else:
         app.logger.error(f"Failed to save backdrop for '{media_title}'")
         return "Failed to save backdrop", 500
-    
+
     # Generate clean ID for navigation anchor
-anchor = generate_clean_id(media_title)
+    anchor = generate_clean_id(media_title)
+
+    # Determine redirect URL based on content type
+    redirect_url = url_for('index') if content_type == 'movie' else url_for('tv_shows')
+
+    # Log the redirect URL for verification
+    app.logger.info(f"Redirect URL: {redirect_url}#{anchor}")
+
+    return redirect(f"{redirect_url}#{anchor}")
 
 # Determine redirect URL based on content type
 redirect_url = url_for('index') if content_type == 'movie' else url_for('tv_shows')
