@@ -1,0 +1,4 @@
+Flask
+tmdbv3api
+requests
+Pillow
