@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Media Collection</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #343a40;
+            color: #fff;
+        }
+        #wrapper {
+            display: flex;
+            width: 100%;
+        }
+        #sidebar-wrapper {
+            width: 250px;
+            background-color: #212529;
+            border-right: 1px solid #444;
+        }
+        .sidebar-heading {
+            padding: 1rem;
+            font-size: 1.5rem;
+            background-color: #1d2124;
+            text-align: center;
+        }
+        .list-group-item {
+            background-color: #212529;
+            color: #fff;
+            border: none;
+        }
+        .list-group-item:hover {
+            background-color: #343a40;
+        }
+        #page-content-wrapper {
+            flex-grow: 1;
+            padding: 20px;
+        }
+        .movie-grid {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .movie-card {
+            flex: 0 0 16.66%;
+            max-width: 16.66%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .movie-card img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .movie-card h5 {
+            font-size: 1rem;
+            margin-top: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .card {
+            background-color: #454d55;
+            border: none;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+<div id="wrapper">
+    <div class="bg-dark border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">My Media Collection</div>
+        <div class="list-group list-group-flush">
+            <button class="list-group-item list-group-item-action" onclick="window.location.assign('/')">Movies</button>
+            <button class="list-group-item list-group-item-action" onclick="location.href='/tv'">TV Shows</button>
+        </div>
+    </div>
+
+    <div id="page-content-wrapper">
+        <div class="container-fluid">
+            <h1 class="my-4">Movie Backdrops</h1>
+
+            <input type="text" id="searchInput" placeholder="Filter Movies..." class="form-control">
+
+            <div class="btn-group mt-2 mb-4" role="group">
+                <button class="btn btn-primary" onclick="filterMoviesWithoutBackdrop()">Show Movies Without Backdrop</button>
+                <button onclick="location.href='/refresh'" class="btn btn-secondary">Refresh</button>
+            </div>
+
+            <div id="movieList" class="movie-grid">
+                {% for movie in movies %}
+                <div class="movie-card" id="{{ movie.clean_id }}" data-title="{{ movie.title | lower }}" data-has-backdrop="{{ movie.has_backdrop }}">
+                    <div>
+                        {% if movie.backdrop_thumb %}
+                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie')">
+                        {% elif movie.backdrop %}
+                        <img src="{{ movie.backdrop }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie')">
+                        {% else %}
+                        <div class="img-thumbnail bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
+                            <span>No Backdrop</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <h5 class="mt-2 text-center" onclick="triggerSearch(`{{ movie.title }}`, 'movie')">{{ movie.title }}</h5>
+                    <p class="text-center">
+                        <strong>Dimensions:</strong> {{ movie.backdrop_dimensions }} | 
+                        <strong>Last Modified:</strong> {{ movie.backdrop_last_modified }}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function triggerSearch(title, contentType) {
+        const cleanTitle = title.replace(/\(\d{4}\)/g, '').replace(/[^a-zA-Z0-9\s]/g, '').trim();
+        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
+    }
+
+    document.getElementById('searchInput').addEventListener('keyup', function() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const movies = document.querySelectorAll('#movieList .movie-card');
+
+        movies.forEach(function(movie) {
+            const title = movie.getAttribute('data-title');
+            movie.style.display = title.includes(query) ? 'block' : 'none';
+        });
+    });
+
+    function filterMoviesWithoutBackdrop() {
+        const movies = document.querySelectorAll('#movieList .movie-card');
+
+        movies.forEach(function(movie) {
+            const hasBackdrop = movie.getAttribute('data-has-backdrop').toLowerCase();
+            if (hasBackdrop === "true") {
+                movie.style.display = 'none';
+            } else {
+                movie.style.display = 'block';
+            }
+        });
+    }
+</script>
+</body>
+</html>
