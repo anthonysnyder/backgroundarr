@@ -41,8 +41,10 @@ def strip_leading_the(title):
 
 # Function to generate a URL-friendly and anchor-safe ID from the media title
 def generate_clean_id(title):
-    # Replace all non-alphanumeric characters with dashes and strip leading/trailing dashes
-    clean_id = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+    # Remove year patterns like "(2024)" or "2024"
+    title_without_year = re.sub(r'\(\d{4}\)|\b\d{4}\b', '', title).strip()
+    # Generate a clean ID by replacing non-alphanumeric characters with dashes
+    clean_id = re.sub(r'[^a-z0-9]+', '-', title_without_year.lower()).strip('-')
     return clean_id
 
 # Function to calculate backdrop resolution for sorting
