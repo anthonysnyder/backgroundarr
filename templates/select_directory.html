@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Directory</title>
+    <style>
+        .debug-info {
+            background-color: #e0f7fa;
+            border: 1px solid #00796b;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        .debug-info h4 {
+            margin: 0 0 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Directory Not Found</h1>
+    <p>The directory for <strong>{{ media_title }}</strong> was not found. Please select a directory from the list below:</p>
+
+    <!-- Debugging Information -->
+    <div class="debug-info">
+        <h4>Debug Info:</h4>
+        <ul>
+            <li><strong>Media Title:</strong> {{ media_title }}</li>
+            <li><strong>Backdrop Path:</strong> {{ backdrop_path }}</li>
+            <li><strong>Content Type:</strong> {{ media_type }}</li>
+            <li><strong>Directories:</strong> {{ similar_dirs }}</li>
+        </ul>
+    </div>
+
+    <!-- Form to Submit Directory -->
+    <form action="{{ url_for('confirm_backdrop_directory') }}" method="post" id="directory-form">
+        <!-- Hidden inputs to pass necessary data -->
+        <input type="hidden" name="backdrop_path" value="{{ backdrop_path }}">
+        <input type="hidden" name="media_title" value="{{ media_title }}">
+        <input type="hidden" name="media_type" value="{{ media_type }}">
+
+        <!-- Directory Selection -->
+        {% for directory in similar_dirs %}
+            <div>
+                <input type="radio" name="selected_directory" value="{{ directory }}" id="{{ directory }}" required>
+                <label for="{{ directory }}">{{ directory }}</label>
+            </div>
+        {% endfor %}
+
+        <!-- Submit Button -->
+        <button type="submit">Save Backdrop</button>
+    </form>
+
+    <!-- JavaScript for Debugging and Submission -->
+    <script>
+        const form = document.getElementById('directory-form');
+
+        // Debugging: Log form submission
+        form.addEventListener('submit', function(event) {
+            console.log('Form is submitting...');
+            console.log('Backdrop Path:', document.querySelector('input[name="backdrop_path"]').value);
+            console.log('Media Title:', document.querySelector('input[name="media_title"]').value);
+            console.log('Media Type:', document.querySelector('input[name="media_type"]').value);
+            console.log('Selected Directory:', document.querySelector('input[name="selected_directory"]:checked')?.value);
+        });
+
+        // Debugging: Alert if no directory is selected (shouldn't happen due to "required")
+        form.addEventListener('submit', function(event) {
+            const selectedDir = document.querySelector('input[name="selected_directory"]:checked');
+            if (!selectedDir) {
+                event.preventDefault();
+                alert('Please select a directory before submitting.');
+            }
+        });
+    </script>
+</body>
+</html>
