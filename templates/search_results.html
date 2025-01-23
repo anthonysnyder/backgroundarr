@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Results</title>
+    <!-- Include Bootstrap for styling -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #343a40; /* Dark background */
+            color: #fff; /* Light text */
+        }
+        .card {
+            background-color: #454d55; /* Card background color */
+            border: none;
+            border-radius: 8px;
+            color: #fff; /* Text color inside the card */
+        }
+        .card-body {
+            padding: 1rem; /* Padding inside the card */
+        }
+        .card-img-top {
+            border-top-left-radius: 8px; /* Rounded top-left corner of the image */
+            border-top-right-radius: 8px; /* Rounded top-right corner of the image */
+            height: 300px; /* Fixed height for the image */
+            object-fit: cover; /* Maintain aspect ratio while covering the container */
+        }
+        .container {
+            margin-top: 20px; /* Margin from the top */
+        }
+        .search-header {
+            text-align: center; /* Center-align the header text */
+            margin-bottom: 30px; /* Space below the header */
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Header section displaying search query and results count -->
+    <div class="search-header">
+        <h1>Search Results for "{{ query }}"</h1>
+        <p>{{ results | length }} results found</p>
+    </div>
+    <div class="row">
+        <!-- Loop through each result returned from the search -->
+        {% for result in results %}
+        <div class="col-md-3 mb-4">
+            <div class="card">
+                <!-- Display the backdrop image if available -->
+                {% if result.backdrop_path %}
+                <img src="https://image.tmdb.org/t/p/w500{{ result.backdrop_path }}" class="card-img-top" alt="{{ result.title or result.name }}">
+                {% else %}
+                <!-- Placeholder for items without an image -->
+                <div class="card-img-top d-flex align-items-center justify-content-center" style="height: 300px; background-color: #6c757d;">
+                    <span>No Backdrop Available</span>
+                </div>
+                {% endif %}
+                <div class="card-body text-center">
+                    <!-- Title of the movie or TV show -->
+                    <h5 class="card-title">{{ result.title or result.name }}</h5>
+                    <p class="card-text">
+                        <!-- Display release date for movies or first air date for TV shows -->
+                        {% if result.release_date %}
+                        <strong>Release Date:</strong> {{ result.release_date }}
+                        {% elif result.first_air_date %}
+                        <strong>First Air Date:</strong> {{ result.first_air_date }}
+                        {% endif %}
+                    </p>
+                    <!-- Button to select the result and proceed to the next step -->
+                    <form action="{% if content_type == 'tv' %}{{ url_for('select_tv', tv_id=result.id) }}{% else %}{{ url_for('select_movie', movie_id=result.id) }}{% endif %}" method="GET">
+                        <button type="submit" class="btn btn-primary">Select</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+</body>
+</html>
