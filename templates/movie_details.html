@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} Backdrops</title> <!-- Dynamic page title based on the movie title -->
+    <style>
+        /* Style for the backdrop grid container */
+        .backdrop-grid {
+            display: flex;
+            flex-wrap: wrap; /* Allows the backdrops to wrap to the next line when the row is full */
+        }
+
+        /* Style for each backdrop item */
+        .backdrop-grid img {
+            max-width: 300px; /* Limit the maximum width of each backdrop */
+            margin: 10px;     /* Add space between each backdrop */
+            cursor: pointer;  /* Change the cursor to a pointer to indicate clickable images */
+            border-radius: 8px; /* Add rounded corners */
+        }
+    </style>
+</head>
+<body>
+    <!-- Page heading displaying which movie's backdrops are shown -->
+    <h1>Backdrops for {{ title }}</h1>
+
+    <!-- Flexible grid layout container for backdrops -->
+    <div class="backdrop-grid">
+        {% for backdrop in backdrops %}
+            <div class="backdrop-item">
+                <!-- Render each backdrop image with an onclick event to select it -->
+                <img src="{{ backdrop.url }}" alt="Backdrop" onclick="selectBackdrop('{{ title }}', '{{ backdrop.url }}')">
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- Form to submit the selected backdrop and movie title -->
+    <form id="backdropForm" method="POST" action="{{ url_for('select_backdrop') }}">
+        <!-- Hidden input to store the movie title -->
+        <input type="hidden" id="movieTitle" name="media_title" value="">
+        <!-- Hidden input to store the selected backdrop's URL -->
+        <input type="hidden" id="backdropUrl" name="backdrop_path" value="">
+    </form>
+
+    <script>
+        /* 
+           Function to handle backdrop selection.
+           - Sets the hidden form inputs for movie title and backdrop URL.
+           - Submits the form to the server.
+        */
+        function selectBackdrop(title, url) {
+            document.getElementById('movieTitle').value = title;  // Set the movie title in the form
+            document.getElementById('backdropUrl').value = url;   // Set the backdrop URL in the form
+            document.getElementById('backdropForm').submit();     // Submit the form
+        }
+    </script>
+</body>
+</html>
