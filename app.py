@@ -15,7 +15,7 @@ app = Flask(__name__)
 @app.template_filter('remove_year')
 def remove_year(value):
     # Regex to remove years in the format 19xx, 20xx, 21xx, 22xx, or 23xx
-    return re.sub(r'\\b(19|20|21|22|23)\\d{2}\\b', '', value).strip()
+    return re.sub(r'\b(19|20|21|22|23)\d{2}\b', '', value).strip()
 
 # Fetch TMDb API key from environment variables for movie/TV show metadata
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
@@ -519,14 +519,6 @@ def confirm_backdrop_directory():
 
     return redirect(f"{redirect_url}#{anchor}")
 
-# Determine redirect URL based on content type
-redirect_url = url_for('index') if content_type == 'movie' else url_for('tv_shows')
-
-# Log the redirect URL for verification
-app.logger.info(f"Redirect URL: {redirect_url}#{anchor}")
-
-return redirect(f"{redirect_url}#{anchor}")
-
 # Function to send Slack notifications about backdrop downloads
 def send_slack_notification(message, local_backdrop_path, backdrop_url):
     # Retrieve Slack webhook URL from environment variables
@@ -553,11 +545,6 @@ def send_slack_notification(message, local_backdrop_path, backdrop_url):
             print(f"Error sending Slack notification: {e}")
     else:
         print("Slack webhook URL not set.")
-
-# Alternative route for page refresh
-@app.route('/refresh')
-def refresh_page():
-    return redirect(url_for('index', refresh='true'))
 
 # Main entry point for running the Flask application
 if __name__ == '__main__':
