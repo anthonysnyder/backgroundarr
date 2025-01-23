@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select a Backdrop</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #343a40; /* Dark background color for better contrast */
+            color: #fff; /* Light text color for readability */
+        }
+        .backdrop-grid {
+            display: flex; /* Enables grid layout for backdrops */
+            flex-wrap: wrap; /* Allows wrapping of backdrops to the next row */
+            justify-content: center; /* Centers the backdrops in the container */
+            gap: 15px; /* Space between backdrop cards */
+        }
+        .backdrop-card {
+            width: 300px; /* Fixed width for each backdrop card */
+            text-align: center; /* Centers text within the card */
+        }
+        .backdrop-card img {
+            width: 100%; /* Makes backdrop images responsive */
+            border-radius: 8px; /* Rounded corners for images */
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Page heading with the selected media title -->
+    <h1 class="my-4 text-center">Select a Backdrop for "{{ media_title }}"</h1>
+    <div class="backdrop-grid">
+        {% for backdrop in backdrops %}
+        <!-- Display each backdrop in a grid -->
+        <div class="backdrop-card">
+            <!-- Image of the backdrop -->
+            <img src="{{ backdrop.url }}" alt="Backdrop for {{ media_title }}">
+            <!-- Display resolution of the backdrop -->
+            <p><strong>Resolution:</strong> {{ backdrop.size }}</p>
+            <!-- Form for selecting the current backdrop -->
+            <form action="/select_backdrop" method="POST">
+                <!-- Hidden inputs to store necessary data for backdrop selection -->
+                <input type="hidden" name="backdrop_path" value="{{ backdrop.url }}">
+                <input type="hidden" name="media_title" value="{{ media_title }}">
+                <input type="hidden" name="media_type" value="{{ content_type }}">
+                <!-- Button to submit the selection -->
+                <button type="submit" class="btn btn-primary mt-2">Select Backdrop</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<script>
+    // Ensure forms have the required data before submission
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            // Fetch input values from the form
+            const backdropPath = form.querySelector('input[name="backdrop_path"]').value;
+            const mediaTitle = form.querySelector('input[name="media_title"]').value;
+            const mediaType = form.querySelector('input[name="media_type"]').value;
+            // Validate that all fields are filled
+            if (!backdropPath || !mediaTitle || !mediaType) {
+                event.preventDefault(); // Prevent form submission
+                alert('Missing form data. Please try again.'); // Show an error message
+            }
+        });
+    });
+</script>
+</body>
+</html>
