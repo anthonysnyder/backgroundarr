@@ -2,6 +2,32 @@
 
 **Backgroundarr** is a Flask application designed to organize, manage, and download high-quality **backdrops** for movies and TV shows. It is tailored for users who maintain local media libraries, providing an intuitive interface to search for backdrops, select them, and integrate them seamlessly with your media collection.
 
+This was built to help manage library local media assets in advance of [Plex releasing their next version of their app](https://www.plex.tv/blog/new-year-same-mission/) which from my testing highlights backdrop images **A LOT** more when viewing specific movie details vs the current version that showed more of the poster. Please see examples below. 
+
+**Examples of Old versus New App views**
+
+21 Jump Street
+![Old 21 Jump Street View](https://github.com/user-attachments/assets/fc2e8638-5460-40dc-97ea-853db293f554)
+
+![New 21 Jump Street View](https://github.com/user-attachments/assets/4d399008-5053-4146-a2b2-459a27eb7aa1)
+
+13th Warrior
+![Old 13th Warrior](https://github.com/user-attachments/assets/b624c792-f9b8-42b5-a345-851a221cd347)
+
+![New 13th Warrior](https://github.com/user-attachments/assets/1cd9e827-4dc8-454f-991d-2968b38b801d)
+
+**_PROTIP_**
+
+When selecting artwork, I HIGHLY recommend choosing one that moves the characters or main focus to the right side of the image AND that has no text. See Good and Bad Examples below: 
+
+**Good**
+No Text, character is clearly visible
+![No Text, character is clearly visible](https://github.com/user-attachments/assets/5cb0279a-6f84-4b74-9a4d-3fd785c0c267)
+
+**Bad (IMO)**
+Text is obscured by movie details rendered in app, making it hard to read.
+![Text is obscured by movie details rendered in app, making it hard to read.](https://github.com/user-attachments/assets/0b20dd02-7e6b-4843-8be6-241c08f5599a)
+
 ### Key Features
 
 - **Effortless Media Management**: Displays movies and TV shows from user-specified directories, showing available backdrops or placeholders for missing ones.
@@ -70,8 +96,25 @@ To enable Slack notifications, add your Slack Webhook URL in the SLACK_WEBHOOK_U
 ```
 environment:
   - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
-### Screenshots
-*Screenshots will be added here.*
+```
+
+## Screenshots
+
+This is the main view
+![Main View](https://github.com/user-attachments/assets/2a547a36-6dd1-4398-8807-852fa62d7bbb)
+
+This is the movie search results. Make sure to reference the year under each movie to ensure you are selecting the right one
+![image](https://github.com/user-attachments/assets/5132d236-fb05-40ec-9153-d3ed19595f9a)
+
+Here is what the search results will display. 
+![image](https://github.com/user-attachments/assets/a54b40d3-23ab-4b09-9c0b-a792ebfd24e5)
+
+This is what the Slack Notification will look like
+![image](https://github.com/user-attachments/assets/ec7ae342-ddb4-4eb2-9c71-ae25117bd319)
+
+Here you can see how it shows up in thre File Structure. (The backdrop-thumb.ext is designed to reduce loadtime of the WebUI) 
+![image](https://github.com/user-attachments/assets/df6fbad9-7cf6-4fdf-b25a-290e575602e9)
+
 
 ### File Structure
 
