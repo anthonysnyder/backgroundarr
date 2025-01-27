@@ -89,19 +89,19 @@
 
             <div id="movieList" class="movie-grid">
                 {% for movie in movies %}
-                <div class="movie-card" id="{{ movie.clean_id }}" data-title="{{ movie.title | lower }}" data-has-backdrop="{{ movie.has_backdrop }}">
+                <div class="movie-card" id="{{ movie.clean_id }}" data-title="{{ movie.title | lower | remove_tmdb }}" data-has-backdrop="{{ movie.has_backdrop }}">
                     <div>
                         {% if movie.backdrop_thumb %}
-                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie')">
+                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title | remove_tmdb }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title | remove_tmdb }}', 'movie')">
                         {% elif movie.backdrop %}
-                        <img src="{{ movie.backdrop }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie')">
+                        <img src="{{ movie.backdrop }}" alt="{{ movie.title | remove_tmdb }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title | remove_tmdb }}', 'movie')">
                         {% else %}
                         <div class="img-thumbnail bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                             <span>No Backdrop</span>
                         </div>
                         {% endif %}
                     </div>
-                    <h5 class="mt-2 text-center" onclick="triggerSearch(`{{ movie.title }}`, 'movie')">{{ movie.title }}</h5>
+                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ movie.title | remove_tmdb }}', 'movie')">{{ movie.title | remove_tmdb }}</h5>
                     <p class="text-center">
                         <strong>Dimensions:</strong> {{ movie.backdrop_dimensions }} | 
                         <strong>Last Modified:</strong> {{ movie.backdrop_last_modified }}
@@ -114,13 +114,13 @@
 </div>
 
 <script>
-   function triggerSearch(title, contentType) {
-    // Remove {tmdb-xxxxx} patterns from the title
-    const cleanTitle = title.replace(/\{tmdb\d+\}/g, '').trim();
+    function triggerSearch(title, contentType) {
+        // Remove {tmdb-xxxxx} patterns from the title
+        const cleanTitle = title.replace(/\{tmdb\d+\}/g, '').trim();
 
-    // Redirect with sanitized title
-    window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
-}
+        // Redirect with sanitized title
+        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
+    }
 
     document.getElementById('searchInput').addEventListener('keyup', function() {
         const query = document.getElementById('searchInput').value.toLowerCase();
