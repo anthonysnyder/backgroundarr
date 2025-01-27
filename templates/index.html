@@ -101,7 +101,7 @@
                         </div>
                         {% endif %}
                     </div>
-                    <h5 class="mt-2 text-center" onclick="triggerSearch(`{{ movie.title }}`, 'movie')">{{ movie.title }}</h5>
+                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ movie.title }}', 'movie')">{{ movie.title }}</h5>
                     <p class="text-center">
                         <strong>Dimensions:</strong> {{ movie.backdrop_dimensions }} | 
                         <strong>Last Modified:</strong> {{ movie.backdrop_last_modified }}
@@ -115,7 +115,10 @@
 
 <script>
     function triggerSearch(title, contentType) {
-        const cleanTitle = title.replace(/\(\d{4}\)/g, '').replace(/[^a-zA-Z0-9\s]/g, '').trim();
+        // Strip everything after the title using a regex pattern
+        const cleanTitle = title.split('{')[0].trim();
+
+        // Redirect with sanitized title
         window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
     }
 
