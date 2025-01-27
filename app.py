@@ -198,11 +198,15 @@ def refresh():
 
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
-    # Get search query from URL parameters
-    query = normalize_title(request.args.get('query', ''))
-        
-    # Remove TMDb IDs from the query (e.g., {tmdb12345})
-    clean_query = re.sub(r'\{tmdb\d+\}', '', query).strip()
+    # Get the search query from the URL parameters
+    query = request.args.get('query', '')
+    
+    # Remove TMDb IDs (e.g., {tmdb-xxxxx}) and sanitize the query
+    clean_query = re.sub(r'\{tmdb-\d+\}', '', query).strip()
+    clean_query = normalize_title(clean_query)  # Ensure it is fully normalized
+
+    # Log the sanitized query for debugging
+    app.logger.info(f"Sanitized search query: {clean_query}")
 
     # Search movies on TMDb using the API
     response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": clean_query})
