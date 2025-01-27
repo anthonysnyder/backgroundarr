@@ -72,10 +72,8 @@ services:
       - PGID=your_pgid_here
       - SLACK_WEBHOOK_URL=your_slack_webhook_url_here
     volumes:
-      - /path/to/movies:/movies
-      - /path/to/kids-movies:/kids-movies
-      - /path/to/tv:/tv
-      - /path/to/kids-tv:/kids-tv
+      - /path/to/your/movies:/movies
+      - /path/to/your/tv:/tv
     networks:
       - bridge_network
 
