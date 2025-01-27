@@ -30,8 +30,9 @@ tv_folders = ["/tv", "/kids-tv", "/tv2", "/kids-tv2"]  # Multiple folders for fl
 
 # Function to normalize movie/TV show titles for consistent searching and comparison
 def normalize_title(title):
-    # Remove all non-alphanumeric characters and convert to lowercase
-    return re.sub(r'[^a-z0-9]+', '', title.lower())
+    # Remove all non-alphanumeric characters, TMDb IDs, and convert to lowercase
+    title_without_tmdb = re.sub(r'\{tmdb\d+\}', '', title)
+    return re.sub(r'[^a-z0-9]+', '', title_without_tmdb.lower())
 
 # Helper function to remove leading "The " from titles for more accurate sorting
 def strip_leading_the(title):
@@ -43,8 +44,10 @@ def strip_leading_the(title):
 def generate_clean_id(title):
     # Remove year patterns like "(2024)" or "2024"
     title_without_year = re.sub(r'\(\d{4}\)|\b\d{4}\b', '', title).strip()
+    # Remove TMDb IDs in curly braces
+    title_without_tmdb = re.sub(r'\{tmdb\d+\}', '', title_without_year).strip()
     # Generate a clean ID by replacing non-alphanumeric characters with dashes
-    clean_id = re.sub(r'[^a-z0-9]+', '-', title_without_year.lower()).strip('-')
+    clean_id = re.sub(r'[^a-z0-9]+', '-', title_without_tmdb.lower()).strip('-')
     return clean_id
 
 # Function to calculate backdrop resolution for sorting
@@ -193,14 +196,16 @@ def refresh():
     get_backdrop_thumbnails()  # Re-scan the directories
     return redirect(url_for('index'))
 
-# Route for searching movies using TMDb API
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
     # Get search query from URL parameters
     query = request.args.get('query', '')
+    
+    # Remove TMDb IDs from the query (e.g., {tmdb12345})
+    clean_query = re.sub(r'\{tmdb\d+\}', '', query).strip()
 
     # Search movies on TMDb using the API
-    response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": query})
+    response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": clean_query})
     results = response.json().get('results', [])
 
     # Generate clean IDs for each movie result and include backdrop URLs
