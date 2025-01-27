@@ -114,10 +114,13 @@
 </div>
 
 <script>
-    function triggerSearch(title, contentType) {
-        const cleanTitle = title.replace(/\(\d{4}\)/g, '').replace(/[^a-zA-Z0-9\s]/g, '').trim();
-        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
-    }
+   function triggerSearch(title, contentType) {
+    // Remove {tmdb-xxxxx} patterns from the title
+    const cleanTitle = title.replace(/\{tmdb\d+\}/g, '').trim();
+
+    // Redirect with sanitized title
+    window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
+}
 
     document.getElementById('searchInput').addEventListener('keyup', function() {
         const query = document.getElementById('searchInput').value.toLowerCase();

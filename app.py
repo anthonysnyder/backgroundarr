@@ -159,7 +159,7 @@ def get_backdrop_thumbnails(base_folders=None):
                 # Generate a clean ID for HTML anchor and URL purposes
                 clean_id = generate_clean_id(media_dir)
                 media_list.append({
-                    'title': media_dir,
+                    'title': re.sub(r'\{tmdb\d+\}', '', media_dir).strip(),  # Strip {tmdb-xxxxx}
                     'backdrop': backdrop,
                     'backdrop_thumb': backdrop_thumb,
                     'backdrop_dimensions': backdrop_dimensions,
@@ -199,8 +199,8 @@ def refresh():
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
     # Get search query from URL parameters
-    query = request.args.get('query', '')
-    
+    query = normalize_title(request.args.get('query', ''))
+        
     # Remove TMDb IDs from the query (e.g., {tmdb12345})
     clean_query = re.sub(r'\{tmdb\d+\}', '', query).strip()
 
