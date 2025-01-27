@@ -40,11 +40,10 @@ BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/original"
 movie_folders = ["/movies", "/kids-movies", "/movies2", "/kids-movies2"]
 tv_folders = ["/tv", "/kids-tv", "/tv2", "/kids-tv2"]  # Multiple folders for flexibility
 
-# Function to normalize movie/TV show titles for consistent searching and comparison
+# Function to strip out everything after the title
 def normalize_title(title):
-    # Remove all non-alphanumeric characters, TMDb IDs, and convert to lowercase
-    title_without_tmdb = re.sub(r'\{tmdb\d+\}', '', title)
-    return re.sub(r'[^a-z0-9]+', '', title_without_tmdb.lower())
+    # Remove patterns like "(year)" or "{tmdb-xxxxx}" from the title
+    return re.sub(r'\s*\(.*?\)|\s*\{.*?\}', '', title).strip()
 
 # Helper function to remove leading "The " from titles for more accurate sorting
 def strip_leading_the(title):
@@ -210,58 +209,62 @@ def refresh():
 
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
-    # Get the search query from the URL parameters
+    # Get the query parameter from the request
     query = request.args.get('query', '')
     
-    # Remove TMDb IDs (e.g., {tmdb-xxxxx}) and sanitize the query
-    clean_query = re.sub(r'\{tmdb-\d+\}', '', query).strip()
-    clean_query = normalize_title(clean_query)  # Ensure it is fully normalized
+    # Normalize the query to remove unwanted patterns like (year) and {tmdb-xxxxx}
+    clean_query = normalize_title(query)
 
-    # Log the sanitized query for debugging
-    app.logger.info(f"Sanitized search query: {clean_query}")
+    # Log the cleaned query for debugging
+    app.logger.info(f"Searching movies with query: {clean_query}")
 
-    # Search movies on TMDb using the API
+    # Perform the search using TMDb API
     response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": clean_query})
-    results = response.json().get('results', [])
+    
+    # Parse the results from the API response
+    if response.status_code == 200:
+        results = response.json().get('results', [])
+    else:
+        app.logger.error(f"TMDb API error: {response.status_code}, Response: {response.text}")
+        results = []
 
-    # Generate clean IDs for each movie result and include backdrop URLs
+    # Add clean IDs and backdrop URLs for each result
     for result in results:
         result['clean_id'] = generate_clean_id(result['title'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
 
-    # Render search results template
-    return render_template('search_results.html', query=query, results=results)
+    # Render the search results page with the cleaned query and results
+    return render_template('search_results.html', query=clean_query, results=results)
 
 # Route for searching TV shows using TMDb API
 @app.route('/search_tv', methods=['GET'])
 def search_tv():
-    # Decode the URL-encoded query parameter to handle special characters
-    query = unquote(request.args.get('query', ''))
+    # Get the query parameter from the request
+    query = request.args.get('query', '')
+    
+    # Normalize the query to remove unwanted patterns like (year) and {tmdb-xxxxx}
+    clean_query = normalize_title(query)
 
-    # Log the received search query for debugging purposes
-    app.logger.info(f"Search TV query received: {query}")
+    # Log the cleaned query for debugging
+    app.logger.info(f"Searching TV shows with query: {clean_query}")
 
-    # Send search request to TMDb API for TV shows, with filters for English-language results
-    response = requests.get(f"{BASE_URL}/search/tv", params={
-        "api_key": TMDB_API_KEY, 
-        "query": query, 
-        "include_adult": False, 
-        "language": "en-US", 
-        "page": 1
-    })
-    results = response.json().get('results', [])
+    # Perform the search using TMDb API
+    response = requests.get(f"{BASE_URL}/search/tv", params={"api_key": TMDB_API_KEY, "query": clean_query})
+    
+    # Parse the results from the API response
+    if response.status_code == 200:
+        results = response.json().get('results', [])
+    else:
+        app.logger.error(f"TMDb API error: {response.status_code}, Response: {response.text}")
+        results = []
 
-    # Log the number of results returned by the API
-    app.logger.info(f"TMDb API returned {len(results)} results for query: {query}")
-
-    # Generate clean IDs for each TV show result and include backdrop URLs
+    # Add clean IDs and backdrop URLs for each result
     for result in results:
         result['clean_id'] = generate_clean_id(result['name'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
-        app.logger.info(f"Result processed: {result['name']} -> Clean ID: {result['clean_id']}")
 
-    # Render search results template with TV show results
-    return render_template('search_results.html', query=query, results=results, content_type="tv")
+    # Render the search results page with the cleaned query and results
+    return render_template('search_results.html', query=clean_query, results=results, content_type="tv")
 
 # Route for selecting a movie and displaying available backdrops
 @app.route('/select_movie/<int:movie_id>', methods=['GET'])
