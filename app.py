@@ -17,6 +17,18 @@ def remove_year(value):
     # Regex to remove years in the format 19xx, 20xx, 21xx, 22xx, or 23xx
     return re.sub(r'\b(19|20|21|22|23)\d{2}\b', '', value).strip()
 
+# Custom Jinja2 filter to remove year information from movie titles for cleaner display
+@app.template_filter('remove_year')
+def remove_year(value):
+    # Regex to remove years in the format 19xx, 20xx, 21xx, 22xx, or 23xx
+    return re.sub(r'\b(19|20|21|22|23)\d{2}\b', '', value).strip()
+
+# Custom Jinja2 filter to remove {tmdb-xxxxx} patterns from movie titles
+@app.template_filter('remove_tmdb')
+def remove_tmdb(value):
+    # Remove patterns like {tmdb-xxxxx}
+    return re.sub(r'\{tmdb\d+\}', '', value).strip()
+
 # Fetch TMDb API key from environment variables for movie/TV show metadata
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 
