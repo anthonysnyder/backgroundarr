@@ -29,6 +29,15 @@ def remove_tmdb(value):
     # Remove patterns like {tmdb-xxxxx}
     return re.sub(r'\{tmdb\d+\}', '', value).strip()
 
+@app.template_filter('escapejs')
+def escapejs_filter(value):
+    """
+    Escapes single and double quotes in a string for safe JavaScript usage.
+    """
+    if not isinstance(value, str):
+        return value
+    return value.replace("'", "\\'").replace('"', '\\"')
+
 # Fetch TMDb API key from environment variables for movie/TV show metadata
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 
