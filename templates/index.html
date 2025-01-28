@@ -92,16 +92,16 @@
                 <div class="movie-card" id="{{ movie.clean_id }}" data-title="{{ movie.title | lower }}" data-has-backdrop="{{ movie.has_backdrop }}">
                     <div>
                         {% if movie.backdrop_thumb %}
-                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie')">
+                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title | replace(\"'\", \"\\'\") }}', 'movie')">
                         {% elif movie.backdrop %}
-                        <img src="{{ movie.backdrop }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie')">
+                        <img src="{{ movie.backdrop }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title | replace(\"'\", \"\\'\") }}', 'movie')">
                         {% else %}
                         <div class="img-thumbnail bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                             <span>No Backdrop</span>
                         </div>
                         {% endif %}
                     </div>
-                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ movie.title }}', 'movie')">{{ movie.title }}</h5>
+                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ movie.title | replace(\"'\", \"\\'\") }}', 'movie')">{{ movie.title }}</h5>
                     <p class="text-center">
                         <strong>Dimensions:</strong> {{ movie.backdrop_dimensions }} | 
                         <strong>Last Modified:</strong> {{ movie.backdrop_last_modified }}
