@@ -61,7 +61,7 @@ Note: Make sure to replace placeholders with your actual data/paths to files.
 
 ```
 services:
-  postarr:
+  backgroundarr:
     image: swguru2004/backgroundarr:latest
     container_name: backgroundarr
     ports:
@@ -71,12 +71,18 @@ services:
       - PUID=your_puid_here
       - PGID=your_pgid_here
       - SLACK_WEBHOOK_URL=your_slack_webhook_url_here
+      - MOVIE_FOLDERS=/movies
+      - TV_FOLDERS=/tv
     volumes:
-      - /path/to/your/movies:/movies
-      - /path/to/your/tv:/tv
+      # Map your media directories to these container paths
+      - /path/to/movies:/movies
+      - /path/to/tv:/tv
     networks:
       - bridge_network
 
+networks:
+  bridge_network:
+    driver: bridge
 networks:
   bridge_network:
     driver: bridge
