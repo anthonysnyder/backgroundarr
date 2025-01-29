@@ -122,6 +122,12 @@
         window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
     }
 
+    function triggerSearch(title, contentType) {
+    // Preserve the full folder name including year and TMDb ID
+    const folderName = title;  // Don't strip anything
+    window.location.href = `/search_${contentType}?query=${encodeURIComponent(folderName)}&folder_name=${encodeURIComponent(folderName)}`;
+    }
+
     document.getElementById('searchInput').addEventListener('keyup', function() {
         const query = document.getElementById('searchInput').value.toLowerCase();
         const movies = document.querySelectorAll('#movieList .movie-card');

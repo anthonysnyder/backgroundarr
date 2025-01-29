@@ -220,12 +220,6 @@ def refresh():
     get_backdrop_thumbnails()  # Re-scan the directories
     return redirect(url_for('index'))
 
-# Function to  preserve the full folder name including year and TMDb ID
-def triggerSearch(title, contentType) {
-    const folderName = title;  // Don't strip anything
-    window.location.href = `/search_${contentType}?query=${encodeURIComponent(folderName)}&folder_name=${encodeURIComponent(folderName)}`;
-}
-
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
     query = request.args.get('query', '')
