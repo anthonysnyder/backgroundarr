@@ -252,31 +252,31 @@ def search_movie():
 # Route for searching TV shows using TMDb API
 @app.route('/search_tv', methods=['GET'])
 def search_tv():
-    # Get the query parameter from the request
-    query = request.args.get('query', '')
-    
-    # Normalize the query to remove unwanted patterns like (year) and {tmdb-xxxxx}
-    clean_query = normalize_title(query)
+    # Decode the URL-encoded query parameter to handle special characters
+    query = unquote(request.args.get('query', ''))
 
-    # Log the cleaned query for debugging
-    app.logger.info(f"Searching TV shows with query: {clean_query}")
+    # Strip {tmdb-xxxxx} from query before searching
+    clean_query = re.sub(r'\{tmdb\d+\}', '', query).strip()
 
-    # Perform the search using TMDb API
-    response = requests.get(f"{BASE_URL}/search/tv", params={"api_key": TMDB_API_KEY, "query": clean_query})
-    
-    # Parse the results from the API response
-    if response.status_code == 200:
-        results = response.json().get('results', [])
-    else:
-        app.logger.error(f"TMDb API error: {response.status_code}, Response: {response.text}")
-        results = []
+    app.logger.info(f"Search TV query received: {clean_query}")
 
-    # Add clean IDs and backdrop URLs for each result
+    # Send search request to TMDb API for TV shows
+    response = requests.get(f"{BASE_URL}/search/tv", params={
+        "api_key": TMDB_API_KEY, 
+        "query": clean_query,  # Use cleaned title
+        "include_adult": False, 
+        "language": "en-US", 
+        "page": 1
+    })
+    results = response.json().get('results', [])
+
+    app.logger.info(f"TMDb API returned {len(results)} results for query: {clean_query}")
+
+    # Generate clean IDs for each TV show result and include backdrop URLs
     for result in results:
         result['clean_id'] = generate_clean_id(result['name'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
 
-    # Render the search results page with the cleaned query and results
     return render_template('search_results.html', query=clean_query, results=results, content_type="tv")
 
 # Route for selecting a movie and displaying available backdrops
