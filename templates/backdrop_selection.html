@@ -39,13 +39,12 @@
             <!-- Display resolution of the backdrop -->
             <p><strong>Resolution:</strong> {{ backdrop.size }}</p>
             <!-- Form for selecting the current backdrop -->
-            <form action="/select_backdrop" method="POST">
-                <!-- Hidden inputs to store necessary data for backdrop selection -->
+            <form action="{{ url_for('select_backdrop') }}" method="POST">
                 <input type="hidden" name="backdrop_path" value="{{ backdrop.url }}">
                 <input type="hidden" name="media_title" value="{{ media_title }}">
                 <input type="hidden" name="media_type" value="{{ content_type }}">
-                <!-- Button to submit the selection -->
-                <button type="submit" class="btn btn-primary mt-2">Select Backdrop</button>
+                <input type="hidden" name="folder_name" value="{{ folder_name }}">
+                <button type="submit" class="btn btn-primary">Download Backdrop</button>
             </form>
         </div>
         {% endfor %}

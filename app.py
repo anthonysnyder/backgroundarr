@@ -220,34 +220,37 @@ def refresh():
     get_backdrop_thumbnails()  # Re-scan the directories
     return redirect(url_for('index'))
 
+# Function to  preserve the full folder name including year and TMDb ID
+def triggerSearch(title, contentType) {
+    const folderName = title;  // Don't strip anything
+    window.location.href = `/search_${contentType}?query=${encodeURIComponent(folderName)}&folder_name=${encodeURIComponent(folderName)}`;
+}
+
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
-    # Get the query parameter from the request
     query = request.args.get('query', '')
+    folder_name = request.args.get('folder_name', query)  # Preserve original folder name
     
-    # Normalize the query to remove unwanted patterns like (year) and {tmdb-xxxxx}
+    # Use clean query for TMDb search but keep original folder name
     clean_query = normalize_title(query)
-
-    # Log the cleaned query for debugging
-    app.logger.info(f"Searching movies with query: {clean_query}")
-
-    # Perform the search using TMDb API
-    response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": clean_query})
     
-    # Parse the results from the API response
+    response = requests.get(f"{BASE_URL}/search/movie", 
+                          params={"api_key": TMDB_API_KEY, "query": clean_query})
+    
     if response.status_code == 200:
         results = response.json().get('results', [])
     else:
-        app.logger.error(f"TMDb API error: {response.status_code}, Response: {response.text}")
+        app.logger.error(f"TMDb API error: {response.status_code}")
         results = []
 
-    # Add clean IDs and backdrop URLs for each result
     for result in results:
         result['clean_id'] = generate_clean_id(result['title'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
 
-    # Render the search results page with the cleaned query and results
-    return render_template('search_results.html', query=clean_query, results=results)
+    return render_template('search_results.html', 
+                         query=clean_query,
+                         folder_name=folder_name,  # Pass folder_name to template
+                         results=results)
 
 # Route for searching TV shows using TMDb API
 @app.route('/search_tv', methods=['GET'])
@@ -282,27 +285,27 @@ def search_tv():
 # Route for selecting a movie and displaying available backdrops
 @app.route('/select_movie/<int:movie_id>', methods=['GET'])
 def select_movie(movie_id):
-    # Fetch detailed information about the selected movie from TMDb API
-    movie_details = requests.get(f"{BASE_URL}/movie/{movie_id}", params={"api_key": TMDB_API_KEY}).json()
-
-    # Extract movie title and generate a clean ID for URL/anchor purposes
-    movie_title = movie_details.get('title', '')
-    clean_id = generate_clean_id(movie_title)
-
-    # Request available backdrops for the selected movie from TMDb API
-    backdrops = requests.get(f"{BASE_URL}/movie/{movie_id}/images", params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
-
-    # Sort backdrops by resolution in descending order (highest resolution first)
+    folder_name = request.args.get('folder_name')  # Get original folder name
+    app.logger.info(f"Select movie received folder_name: {folder_name}")
+    
+    movie_details = requests.get(f"{BASE_URL}/movie/{movie_id}", 
+                               params={"api_key": TMDB_API_KEY}).json()
+    
+    backdrops = requests.get(f"{BASE_URL}/movie/{movie_id}/images", 
+                           params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
     backdrops_sorted = sorted(backdrops, key=backdrop_resolution, reverse=True)
 
-    # Format backdrop details for display, including full URL and dimensions
     formatted_backdrops = [{
         'url': f"{BACKDROP_BASE_URL}{backdrop['file_path']}",
         'size': f"{backdrop['width']}x{backdrop['height']}"
     } for backdrop in backdrops_sorted]
 
-    # Render backdrop selection template with sorted backdrops and movie details
-    return render_template('backdrop_selection.html', media_title=movie_title, content_type='movie', backdrops=formatted_backdrops)
+    return render_template(
+        'backdrop_selection.html',
+        media_title=movie_details.get('title'),
+        content_type='movie',
+        backdrops=formatted_backdrops,
+        folder_name=folder_name  # Pass original folder name
 
 # Route for selecting a TV show and displaying available backdrops
 @app.route('/select_tv/<int:tv_id>', methods=['GET'])
@@ -419,90 +422,38 @@ def serve_backdrop(filename):
 # Route for handling backdrop selection and downloading
 @app.route('/select_backdrop', methods=['POST'])
 def select_backdrop():
-    # Log the received form data for debugging and tracking
-    app.logger.info("Received form data: %s", request.form)
-
-    # Validate that all required form data is present
-    if 'backdrop_path' not in request.form or 'media_title' not in request.form or 'media_type' not in request.form:
-        app.logger.error("Missing form data: %s", request.form)
-        return "Bad Request: Missing form data", 400
-
     try:
-        # Extract form data for backdrop download
         backdrop_url = request.form['backdrop_path']
         media_title = request.form['media_title']
-        media_type = request.form['media_type']  # Should be either 'movie' or 'tv'
+        media_type = request.form['media_type']
+        folder_name = request.form.get('folder_name')  # Get the preserved folder name
+        
+        app.logger.info(f"Select backdrop received folder_name: {folder_name}")
 
-        # Log detailed information about the backdrop selection
-        app.logger.info(f"Backdrop Path: {backdrop_url}, Media Title: {media_title}, Media Type: {media_type}")
-
-        # Select base folders based on media type (movies or TV shows)
         base_folders = movie_folders if media_type == 'movie' else tv_folders
-
-        # Initialize variables for directory matching
+        
+        # Use folder_name for directory lookup instead of media_title
         save_dir = None
-        possible_dirs = []
-        best_similarity = 0
-        best_match_dir = None
-
-        # Normalize media title for comparison
-        normalized_media_title = normalize_title(media_title)
-
-        # Search for an exact or closest matching directory
         for base_folder in base_folders:
-            directories = os.listdir(base_folder)
-            possible_dirs.extend(directories)
-
-            for directory in directories:
-                normalized_dir_name = normalize_title(directory)
-                # Calculate string similarity between media title and directory name
-                similarity = SequenceMatcher(None, normalized_media_title, normalized_dir_name).ratio()
-
-                # Update best match if current similarity is higher
-                if similarity > best_similarity:
-                    best_similarity = similarity
-                    best_match_dir = os.path.join(base_folder, directory)
-
-                # If exact match found, set save directory
-                if directory == media_title:
-                    save_dir = os.path.join(base_folder, directory)
-                    break
-
-            if save_dir:
+            possible_dir = os.path.join(base_folder, folder_name)
+            if os.path.exists(possible_dir):
+                save_dir = possible_dir
                 break
 
-        # If an exact match is found, proceed with downloading
-        if save_dir:
-            local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-            if local_backdrop_path:
-                # Send Slack notification about successful backdrop download
-                message = f"Backdrop for '{media_title}' has been downloaded!"
-                send_slack_notification(message, local_backdrop_path, backdrop_url)
-            return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
+        if not save_dir:
+            app.logger.error(f"Directory not found for folder name: {folder_name}")
+            return f"Directory not found: {folder_name}", 404
 
-        # If no exact match, use best similarity match above a threshold
-        similarity_threshold = 0.8
-        if best_similarity >= similarity_threshold:
-            save_dir = best_match_dir
-            local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-            if local_backdrop_path:
-                # Send Slack notification about successful backdrop download
-                message = f"Backdrop for '{media_title}' has been downloaded!"
-                send_slack_notification(message, local_backdrop_path, backdrop_url)
-            return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
+        local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, folder_name, save_dir)
+        if local_backdrop_path:
+            message = f"Backdrop for '{folder_name}' has been downloaded!"
+            send_slack_notification(message, local_backdrop_path, backdrop_url)
 
-        # If no suitable directory found, present user with directory selection options
-        similar_dirs = get_close_matches(media_title, possible_dirs, n=5, cutoff=0.5)
-        return render_template('select_directory.html', similar_dirs=similar_dirs, media_title=media_title, backdrop_path=backdrop_url, media_type=media_type)
+        return redirect(url_for('index') + f"#{generate_clean_id(folder_name)}")
 
-    except FileNotFoundError as fnf_error:
-        # Log and handle file not found errors
-        app.logger.error("File not found: %s", fnf_error)
-        return "Directory not found", 404
     except Exception as e:
-        # Log and handle any unexpected errors
-        app.logger.exception("Unexpected error in select_backdrop route: %s", e)
-        return "Internal Server Error", 500
+        app.logger.exception("Error in select_backdrop: %s", str(e))
+        return f"Error: {str(e)}", 500
     
 ## Route for manually confirming the directory and saving the backdrop
 @app.route('/confirm_backdrop_directory', methods=['POST'])

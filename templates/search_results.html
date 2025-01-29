@@ -69,6 +69,7 @@
                     </p>
                     <!-- Button to select the result and proceed to the next step -->
                     <form action="{% if content_type == 'tv' %}{{ url_for('select_tv', tv_id=result.id) }}{% else %}{{ url_for('select_movie', movie_id=result.id) }}{% endif %}" method="GET">
+                        <input type="hidden" name="folder_name" value="{{ folder_name }}">
                         <button type="submit" class="btn btn-primary">Select</button>
                     </form>
                 </div>
