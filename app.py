@@ -300,6 +300,7 @@ def select_movie(movie_id):
         content_type='movie',
         backdrops=formatted_backdrops,
         folder_name=folder_name  # Pass original folder name
+    )
 
 # Route for selecting a TV show and displaying available backdrops
 @app.route('/select_tv/<int:tv_id>', methods=['GET'])
