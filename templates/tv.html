@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My TV Show Collection</title>
-    <!-- External CSS for styling -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
         body {
-            background-color: #343a40; /* Dark background */
-            color: #fff; /* Light text */
+            background-color: #343a40;
+            color: #fff;
         }
         #wrapper {
             display: flex;
@@ -17,7 +16,7 @@
         }
         #sidebar-wrapper {
             width: 250px;
-            background-color: #212529; /* Darker sidebar */
+            background-color: #212529;
             border-right: 1px solid #444;
         }
         .sidebar-heading {
@@ -60,21 +59,10 @@
             text-align: center;
             cursor: pointer;
         }
-        .card {
-            background-color: #454d55; /* Darker cards */
-            border: none;
-            border-radius: 8px;
-        }
-        .card-body {
-            background-color: #6c757d; /* Light gray for card bodies */
-            padding: 1rem;
-            border-radius: 8px;
-        }
     </style>
 </head>
 <body>
 <div id="wrapper">
-    <!-- Sidebar navigation menu -->
     <div class="bg-dark border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">My Media Collection</div>
         <div class="list-group list-group-flush">
@@ -83,39 +71,31 @@
         </div>
     </div>
 
-    <!-- Main Content Area -->
     <div id="page-content-wrapper">
         <div class="container-fluid">
             <h1 class="my-4">TV Show Collection</h1>
 
-            <!-- Filter and refresh controls -->
             <input type="text" id="searchInput" placeholder="Filter TV Shows..." class="form-control">
             <div class="btn-group mt-2 mb-4" role="group">
-                <!-- Button to show TV shows without backdrops -->
                 <button class="btn btn-primary" onclick="filterTVShowsWithoutBackdrop()">Show TV Shows Without Backdrop</button>
-                <!-- Refresh button to reload data -->
                 <button onclick="location.href='/refresh'" class="btn btn-secondary">Refresh</button>
             </div>
 
-            <!-- Grid to display TV shows -->
             <div id="tvList" class="movie-grid">
                 {% for tv_show in tv_shows %}
                 <div class="movie-card" id="{{ tv_show.clean_id }}" data-title="{{ tv_show.title | lower }}" data-has-backdrop="{{ tv_show.has_backdrop | lower }}">
                     <div>
-                        <!-- Display the TV show's thumbnail or placeholder if none exists -->
                         {% if tv_show.backdrop_thumb %}
-                        <img src="{{ tv_show.backdrop_thumb }}" alt="{{ tv_show.title }}" class="movie-backdrop" onclick="triggerSearch('{{ tv_show.clean_title }}', 'tv')">
+                        <img src="{{ tv_show.backdrop_thumb }}" alt="{{ tv_show.title }}" onclick="triggerSearch('{{ tv_show.title | escapejs }}', 'tv')">
                         {% elif tv_show.backdrop %}
-                        <img src="{{ tv_show.backdrop }}" alt="{{ tv_show.title }}" class="movie-backdrop" onclick="triggerSearch('{{ tv_show.clean_title }}', 'tv')">
+                        <img src="{{ tv_show.backdrop }}" alt="{{ tv_show.title }}" onclick="triggerSearch('{{ tv_show.title | escapejs }}', 'tv')">
                         {% else %}
                         <div class="img-thumbnail bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                             <span>No Backdrop</span>
                         </div>
                         {% endif %}
                     </div>
-                    <!-- Display the TV show's title and make it clickable -->
-                    <h5 class="mt-2 text-center" onclick="triggerSearch(`{{ tv_show.title }}`, 'tv')">{{ tv_show.title }}</h5>          
-                    <!-- Display additional details like resolution and modification date -->
+                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ tv_show.title | escapejs }}', 'tv')">{{ tv_show.title }}</h5>
                     <p class="text-center">
                         <strong>Dimensions:</strong> {{ tv_show.backdrop_dimensions }} | 
                         <strong>Last Modified:</strong> {{ tv_show.backdrop_last_modified }}
@@ -127,48 +107,39 @@
     </div>
 </div>
 
+<!-- JavaScript Section -->
 <script>
-    // Function to trigger search
     function triggerSearch(title, contentType) {
-        // Clean title by removing year and special characters
-        const cleanTitle = title
-            .replace(/\(\d{4}\)/g, '') // Remove the year in parentheses
-            .replace(/[^a-zA-Z0-9\s]/g, '') // Remove all non-alphanumeric characters except spaces
-            .trim(); // Trim leading/trailing spaces
-
-        // Redirect with sanitized title
-        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
+        const folderName = title;
+        window.location.href = `/search_${contentType}?query=${encodeURIComponent(folderName)}&folder_name=${encodeURIComponent(folderName)}`;
     }
 
-    // Function to filter TV shows based on the search input
-    document.getElementById('searchInput').addEventListener('keyup', function() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
-        const tvShows = document.querySelectorAll('#tvList .movie-card');
+    document.getElementById('searchInput').addEventListener('input', function () {
+        let filter = this.value.toLowerCase();
+        let items = document.querySelectorAll('.movie-card');
 
-        tvShows.forEach(function(tvShow) {
-            const title = tvShow.getAttribute('data-title');
-            tvShow.style.display = title.includes(query) ? 'block' : 'none';
+        items.forEach(item => {
+            let title = item.getAttribute('data-title');
+            if (title.includes(filter)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
         });
     });
 
-    // Function to filter TV shows without backdrops
     function filterTVShowsWithoutBackdrop() {
-        const tvShows = document.querySelectorAll('#tvList .movie-card');
-
-        tvShows.forEach(function(tvShow) {
-            const hasBackdrop = tvShow.getAttribute('data-has-backdrop').toLowerCase(); // Normalize to lowercase
-            console.log(`TV Show: ${tvShow.getAttribute('data-title')}, Has Backdrop: ${hasBackdrop}`);
-
-            if (hasBackdrop === "true") {
-                tvShow.style.display = 'none';  // Hide TV shows with backdrops
+        let items = document.querySelectorAll('.movie-card');
+        items.forEach(item => {
+            let hasBackdrop = item.getAttribute('data-has-backdrop');
+            if (hasBackdrop === 'false') {
+                item.style.display = '';
             } else {
-                tvShow.style.display = 'block';  // Show TV shows without backdrops
+                item.style.display = 'none';
             }
         });
     }
-
-    // Update the button's click event to call filterTVShowsWithoutBackdrop
-    document.querySelector('.btn-primary').addEventListener('click', filterTVShowsWithoutBackdrop);
 </script>
+
 </body>
 </html>

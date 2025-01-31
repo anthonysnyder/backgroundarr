@@ -57,9 +57,10 @@
             // Fetch input values from the form
             const backdropPath = form.querySelector('input[name="backdrop_path"]').value;
             const mediaTitle = form.querySelector('input[name="media_title"]').value;
+            const folderName = form.querySelector('input[name="folder_name"]').value;
             const mediaType = form.querySelector('input[name="media_type"]').value;
             // Validate that all fields are filled
-            if (!backdropPath || !mediaTitle || !mediaType) {
+            if (!backdropPath || !mediaTitle || !folderName || !mediaType) {
                 event.preventDefault(); // Prevent form submission
                 alert('Missing form data. Please try again.'); // Show an error message
             }

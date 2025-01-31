@@ -48,8 +48,8 @@
         <div class="col-md-3 mb-4">
             <div class="card">
                 <!-- Display the backdrop image if available -->
-                {% if result.backdrop_path %}
-                <img src="https://image.tmdb.org/t/p/w500{{ result.backdrop_path }}" class="card-img-top" alt="{{ result.title or result.name }}">
+                {% if result.backdrop_url %}
+                <img src="{{ result.backdrop_url }}" class="card-img-top" alt="{{ result.title or result.name }}">
                 {% else %}
                 <!-- Placeholder for items without an image -->
                 <div class="card-img-top d-flex align-items-center justify-content-center" style="height: 300px; background-color: #6c757d;">
@@ -69,7 +69,7 @@
                     </p>
                     <!-- Button to select the result and proceed to the next step -->
                     <form action="{% if content_type == 'tv' %}{{ url_for('select_tv', tv_id=result.id) }}{% else %}{{ url_for('select_movie', movie_id=result.id) }}{% endif %}" method="GET">
-                        <input type="hidden" name="folder_name" value="{{ folder_name }}">
+                        <input type="hidden" name="folder_name" value="{{ folder_name | escape }}">
                         <button type="submit" class="btn btn-primary">Select</button>
                     </form>
                 </div>
