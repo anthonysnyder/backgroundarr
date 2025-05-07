@@ -145,7 +145,7 @@ def get_backdrop_thumbnails(base_folders=None):
     # Iterate through specified base folders to find media with backdrops
     for base_folder in base_folders:
         for media_dir in sorted(os.listdir(base_folder)):
-            if media_dir == "@eadir":  # Skip Synology NAS system folders
+            if media_dir.lower() in ["@eadir", "#recycle"]:  # Skip Synology NAS system folders (case-insensitive)
                 continue
 
             media_path = os.path.join(base_folder, media_dir)
