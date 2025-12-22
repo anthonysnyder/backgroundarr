@@ -92,16 +92,16 @@
                 <div class="movie-card" id="{{ movie.clean_id }}" data-title="{{ movie.title | lower }}" data-has-backdrop="{{ movie.has_backdrop }}">
                     <div>
                         {% if movie.backdrop_thumb %}
-                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title | escapejs }}', 'movie')">
+                        <img src="{{ movie.backdrop_thumb }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie', '{{ movie.title }}')">
                         {% elif movie.backdrop %}
-                        <img src="{{ movie.backdrop }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title | escapejs }}', 'movie')">
+                        <img src="{{ movie.backdrop }}" alt="{{ movie.title }}" class="movie-backdrop" onclick="triggerSearch('{{ movie.title }}', 'movie', '{{ movie.title }}')">
                         {% else %}
                         <div class="img-thumbnail bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                             <span>No Backdrop</span>
                         </div>
                         {% endif %}
                     </div>
-                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ movie.title | escapejs }}', 'movie')">{{ movie.title }}</h5>
+                    <h5 class="mt-2 text-center" onclick="triggerSearch(`{{ movie.title }}`, 'movie', `{{ movie.title }}`)">{{ movie.title }}</h5>
                     <p class="text-center">
                         <strong>Dimensions:</strong> {{ movie.backdrop_dimensions }} | 
                         <strong>Last Modified:</strong> {{ movie.backdrop_last_modified }}
@@ -114,18 +114,16 @@
 </div>
 
 <script>
-    function triggerSearch(title, contentType) {
-        // Strip everything after the title using a regex pattern
-        const cleanTitle = title.split('{')[0].trim();
+    // Function to trigger search for a movie
+    function triggerSearch(title, contentType, directoryName) {
+        // Clean the title by removing unwanted characters
+        const cleanTitle = title
+            .replace(/\(\d{4}\)/g, '') // Remove the year in parentheses
+            .replace(/[^a-zA-Z0-9\s]/g, '') // Remove all non-alphanumeric characters except spaces
+            .trim(); // Trim leading/trailing spaces
 
-        // Redirect with sanitized title
-        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}`;
-    }
-
-    function triggerSearch(title, contentType) {
-    // Preserve the full folder name including year and TMDb ID
-    const folderName = title;  // Don't strip anything
-    window.location.href = `/search_${contentType}?query=${encodeURIComponent(folderName)}&folder_name=${encodeURIComponent(folderName)}`;
+        // Redirect with the cleaned title AND the directory name
+        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}&directory=${encodeURIComponent(directoryName)}`;
     }
 
     document.getElementById('searchInput').addEventListener('keyup', function() {

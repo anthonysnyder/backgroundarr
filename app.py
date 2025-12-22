@@ -2,6 +2,7 @@ import os
 import requests
 import re
 import urllib.parse
+import json
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory
 from difflib import get_close_matches, SequenceMatcher  # For string similarity
 from PIL import Image  # For image processing
@@ -53,10 +54,13 @@ tv_folders = os.getenv("TV_FOLDERS").split(',')
 if not movie_folders or not tv_folders:
     raise ValueError("MOVIE_FOLDERS and TV_FOLDERS must be set in the environment variables.")
 
-# Function to strip out everything after the title
+# Path to the mapping file that stores TMDb ID -> Directory relationships
+MAPPING_FILE = os.path.join(os.path.dirname(__file__), 'tmdb_directory_mapping.json')
+
+# Function to normalize movie/TV show titles for consistent searching and comparison
 def normalize_title(title):
-    # Remove patterns like "(year)" or "{tmdb-xxxxx}" from the title
-    return re.sub(r'\s*\(.*?\)|\s*\{.*?\}', '', title).strip()
+    # Remove all non-alphanumeric characters and convert to lowercase
+    return re.sub(r'[^a-z0-9]+', '', title.lower())
 
 # Helper function to remove leading "The " from titles for more accurate sorting
 def strip_leading_the(title):
@@ -73,6 +77,53 @@ def generate_clean_id(title):
     # Generate a clean ID by replacing non-alphanumeric characters with dashes
     clean_id = re.sub(r'[^a-z0-9]+', '-', title_without_tmdb.lower()).strip('-')
     return clean_id
+
+# Function to load the TMDb ID to directory mapping from disk
+def load_directory_mapping():
+    """Load the mapping file that remembers which TMDb IDs go to which directories"""
+    if os.path.exists(MAPPING_FILE):
+        try:
+            with open(MAPPING_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            app.logger.error(f"Error loading mapping file: {e}")
+            return {}
+    return {}
+
+# Function to save the TMDb ID to directory mapping to disk
+def save_directory_mapping(mapping):
+    """Save the mapping file to remember which TMDb IDs go to which directories"""
+    try:
+        with open(MAPPING_FILE, 'w') as f:
+            json.dump(mapping, f, indent=2)
+        app.logger.info(f"Saved directory mapping to {MAPPING_FILE}")
+    except Exception as e:
+        app.logger.error(f"Error saving mapping file: {e}")
+
+# Function to get directory from mapping for a given TMDb ID and media type
+def get_mapped_directory(tmdb_id, media_type):
+    """Check if we already know which directory this TMDb ID belongs to"""
+    mapping = load_directory_mapping()
+    key = f"{media_type}_{tmdb_id}"
+    mapped_dir = mapping.get(key)
+    if mapped_dir and os.path.exists(mapped_dir):
+        app.logger.info(f"Found existing mapping: {key} -> {mapped_dir}")
+        return mapped_dir
+    elif mapped_dir:
+        app.logger.warning(f"Mapped directory no longer exists: {mapped_dir}, removing mapping")
+        # Clean up invalid mapping
+        del mapping[key]
+        save_directory_mapping(mapping)
+    return None
+
+# Function to save a new TMDb ID to directory mapping
+def save_mapped_directory(tmdb_id, media_type, directory_path):
+    """Remember which directory this TMDb ID belongs to for next time"""
+    mapping = load_directory_mapping()
+    key = f"{media_type}_{tmdb_id}"
+    mapping[key] = directory_path
+    save_directory_mapping(mapping)
+    app.logger.info(f"Saved new mapping: {key} -> {directory_path}")
 
 # Function to calculate backdrop resolution for sorting
 def backdrop_resolution(backdrop):
@@ -222,114 +273,113 @@ def refresh():
 
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
+    # Get search query and directory name from URL parameters
     query = request.args.get('query', '')
-    folder_name = request.args.get('folder_name', query)  # Preserve original folder name
-    
-    # Use clean query for TMDb search but keep original folder name
-    clean_query = normalize_title(query)
-    
-    response = requests.get(f"{BASE_URL}/search/movie", 
-                          params={"api_key": TMDB_API_KEY, "query": clean_query})
-    
-    if response.status_code == 200:
-        results = response.json().get('results', [])
-    else:
-        app.logger.error(f"TMDb API error: {response.status_code}")
-        results = []
+    directory = request.args.get('directory', '')  # Get the directory name from the original movie card click
 
+    # Search movies on TMDb using the API
+    response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": query})
+    results = response.json().get('results', [])
+
+    # Generate clean IDs for each movie result
     for result in results:
         result['clean_id'] = generate_clean_id(result['title'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
 
-    return render_template('search_results.html', 
-                         query=clean_query,
-                         folder_name=folder_name,  # Pass folder_name to template
-                         results=results)
+    # Render search results template with directory name
+    return render_template('search_results.html', query=query, results=results, directory=directory)
 
 # Route for searching TV shows using TMDb API
 @app.route('/search_tv', methods=['GET'])
 def search_tv():
-    # Get query and folder_name from the request
-    query = request.args.get('query', '')
-    folder_name = request.args.get('folder_name', query)  # Preserve folder name if passed
+    # Decode the URL-encoded query parameter to handle special characters
+    query = unquote(request.args.get('query', ''))
+    directory = request.args.get('directory', '')  # Get the directory name from the original TV show card click
 
-    # Normalize the query for TMDb search
-    clean_query = normalize_title(query)
+    # Log the received search query for debugging purposes
+    app.logger.info(f"Search TV query received: {query}, Directory: {directory}")
 
-    app.logger.info(f"Searching TV with query: {clean_query}, folder_name: {folder_name}")
+    # Send search request to TMDb API for TV shows, with filters for English-language results
+    response = requests.get(f"{BASE_URL}/search/tv", params={
+        "api_key": TMDB_API_KEY,
+        "query": query,
+        "include_adult": False,
+        "language": "en-US",
+        "page": 1
+    })
+    results = response.json().get('results', [])
 
-    # Perform the TMDb API search
-    response = requests.get(f"{BASE_URL}/search/tv", params={"api_key": TMDB_API_KEY, "query": clean_query})
-    results = response.json().get('results', []) if response.status_code == 200 else []
+    # Log the number of results returned by the API
+    app.logger.info(f"TMDb API returned {len(results)} results for query: {query}")
 
-    # Format results for rendering
+    # Generate clean IDs for each TV show result for URL and anchor purposes
     for result in results:
         result['clean_id'] = generate_clean_id(result['name'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
+        app.logger.info(f"Result processed: {result['name']} -> Clean ID: {result['clean_id']}")
 
-    return render_template(
-        'search_results.html',
-        query=clean_query,
-        folder_name=folder_name,  # Pass folder name for downstream processing
-        results=results,
-        content_type="tv"
-    )
+    # Render search results template with TV show results and directory name
+    return render_template('search_results.html', query=query, results=results, content_type="tv", directory=directory)
     
 # Route for selecting a movie and displaying available backdrops
 @app.route('/select_movie/<int:movie_id>', methods=['GET'])
 def select_movie(movie_id):
-    folder_name = request.args.get('folder_name')  # Get original folder name
-    app.logger.info(f"Select movie received folder_name: {folder_name}")
-    
-    movie_details = requests.get(f"{BASE_URL}/movie/{movie_id}", 
-                               params={"api_key": TMDB_API_KEY}).json()
-    
-    backdrops = requests.get(f"{BASE_URL}/movie/{movie_id}/images", 
-                           params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
+    # Get the directory name passed from the search results
+    directory = request.args.get('directory', '')
+
+    # Fetch detailed information about the selected movie from TMDb API
+    movie_details = requests.get(f"{BASE_URL}/movie/{movie_id}", params={"api_key": TMDB_API_KEY}).json()
+
+    # Extract movie title and generate a clean ID for URL/anchor purposes
+    movie_title = movie_details.get('title', '')
+    clean_id = generate_clean_id(movie_title)
+
+    app.logger.info(f"Selected movie: {movie_title}, Directory from click: {directory}")
+
+    # Request available backdrops for the selected movie from TMDb API
+    backdrops = requests.get(f"{BASE_URL}/movie/{movie_id}/images", params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
+
+    # Sort backdrops by resolution in descending order (highest resolution first)
     backdrops_sorted = sorted(backdrops, key=backdrop_resolution, reverse=True)
 
+    # Format backdrop details for display, including full URL and dimensions
     formatted_backdrops = [{
         'url': f"{BACKDROP_BASE_URL}{backdrop['file_path']}",
         'size': f"{backdrop['width']}x{backdrop['height']}"
     } for backdrop in backdrops_sorted]
 
-    return render_template(
-        'backdrop_selection.html',
-        media_title=movie_details.get('title'),
-        content_type='movie',
-        backdrops=formatted_backdrops,
-        folder_name=folder_name  # Pass original folder name
-    )
+    # Render backdrop selection template with sorted backdrops, movie details, TMDb ID, and DIRECTORY
+    return render_template('backdrop_selection.html', media_title=movie_title, content_type='movie', backdrops=formatted_backdrops, tmdb_id=movie_id, directory=directory)
 
 # Route for selecting a TV show and displaying available backdrops
 @app.route('/select_tv/<int:tv_id>', methods=['GET'])
 def select_tv(tv_id):
+    # Get the directory name passed from the search results
+    directory = request.args.get('directory', '')
+
     # Fetch detailed information about the selected TV show from TMDb API
     tv_details = requests.get(f"{BASE_URL}/tv/{tv_id}", params={"api_key": TMDB_API_KEY}).json()
 
-    # Extract TV show title
+    # Extract TV show title and generate a clean ID for URL/anchor purposes
     tv_title = tv_details.get('name', '')
-    folder_name = request.args.get('folder_name', tv_title)  # Use provided folder_name or default to title
+    clean_id = generate_clean_id(tv_title)
 
-    # Log folder name for debugging
-    app.logger.info(f"Select TV received folder_name: {folder_name}")
+    app.logger.info(f"Selected TV show: {tv_title}, Directory from click: {directory}")
 
-    # Request available backdrops for the selected TV show
+    # Request available backdrops for the selected TV show from TMDb API
     backdrops = requests.get(f"{BASE_URL}/tv/{tv_id}/images", params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
+
+    # Sort backdrops by resolution in descending order (highest resolution first)
     backdrops_sorted = sorted(backdrops, key=backdrop_resolution, reverse=True)
 
+    # Format backdrop details for display, including full URL and dimensions
     formatted_backdrops = [{
         'url': f"{BACKDROP_BASE_URL}{backdrop['file_path']}",
         'size': f"{backdrop['width']}x{backdrop['height']}"
     } for backdrop in backdrops_sorted]
 
-    return render_template(
-        'backdrop_selection.html',
-        media_title=tv_title,
-        content_type='tv',
-        backdrops=formatted_backdrops,
-        folder_name=folder_name  # Pass original folder name for downstream processing
-    )
+    # Render backdrop selection template with sorted backdrops, TV show details, content type, TMDb ID, and DIRECTORY
+    return render_template('backdrop_selection.html', backdrops=formatted_backdrops, media_title=tv_title, clean_id=clean_id, content_type="tv", tmdb_id=tv_id, directory=directory)
 
 # Function to handle backdrop download and thumbnail creation
 def save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir):
@@ -421,42 +471,142 @@ def serve_backdrop(filename):
 # Route for handling backdrop selection and downloading
 @app.route('/select_backdrop', methods=['POST'])
 def select_backdrop():
+    # Log the received form data for debugging and tracking
+    app.logger.info("Received form data: %s", request.form)
+
+    # Validate that all required form data is present
+    if 'backdrop_path' not in request.form or 'media_title' not in request.form or 'media_type' not in request.form:
+        app.logger.error("Missing form data: %s", request.form)
+        return "Bad Request: Missing form data", 400
+
     try:
-        # Extract form data
+        # Extract form data for backdrop download
         backdrop_url = request.form['backdrop_path']
         media_title = request.form['media_title']
-        media_type = request.form['media_type']
-        folder_name = request.form.get('folder_name', media_title)  # Use provided folder name
+        media_type = request.form['media_type']  # Should be either 'movie' or 'tv'
+        tmdb_id = request.form.get('tmdb_id')  # Get TMDb ID if available
+        directory = request.form.get('directory', '')  # Get the directory name from the original card click!
 
-        app.logger.info(f"Select backdrop received folder_name: {folder_name}")
+        # Log detailed information about the backdrop selection
+        app.logger.info(f"Backdrop Path: {backdrop_url}, Media Title: {media_title}, Media Type: {media_type}, TMDb ID: {tmdb_id}, Directory: {directory}")
 
-        # Determine base folders based on media type
+        # Select base folders based on media type (movies or TV shows)
         base_folders = movie_folders if media_type == 'movie' else tv_folders
 
-        # Locate the exact directory based on folder_name
+        # Initialize variables for directory matching
         save_dir = None
+        possible_dirs = []
+        best_similarity = 0
+        best_match_dir = None
+
+        # FIRST: If we have the directory name from the original click, use it directly!
+        if directory:
+            # Find the exact directory in the base folders
+            for base_folder in base_folders:
+                potential_path = os.path.join(base_folder, directory)
+                if os.path.exists(potential_path) and os.path.isdir(potential_path):
+                    save_dir = potential_path
+                    app.logger.info(f"Using directory from original click: {save_dir}")
+                    # Save the TMDb ID mapping for future use
+                    if tmdb_id:
+                        save_mapped_directory(tmdb_id, media_type, save_dir)
+                    # Save the backdrop
+                    local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
+                    if local_backdrop_path:
+                        message = f"Backdrop for '{media_title}' has been downloaded!"
+                        send_slack_notification(message, local_backdrop_path, backdrop_url)
+                    return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
+
+        # SECOND: Check if we have a saved mapping for this TMDb ID
+        if tmdb_id:
+            mapped_dir = get_mapped_directory(tmdb_id, media_type)
+            if mapped_dir:
+                app.logger.info(f"Using previously saved directory mapping for {media_type}_{tmdb_id}: {mapped_dir}")
+                save_dir = mapped_dir
+                # Skip the fuzzy matching logic and go straight to saving
+                local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
+                if local_backdrop_path:
+                    message = f"Backdrop for '{media_title}' has been downloaded!"
+                    send_slack_notification(message, local_backdrop_path, backdrop_url)
+                return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
+
+        # Normalize media title for comparison
+        normalized_media_title = normalize_title(media_title)
+
+        # Search for an exact or closest matching directory
         for base_folder in base_folders:
-            possible_dir = os.path.join(base_folder, folder_name)
-            if os.path.exists(possible_dir):
-                save_dir = possible_dir
+            directories = os.listdir(base_folder)
+            possible_dirs.extend(directories)
+
+            for directory in directories:
+                normalized_dir_name = normalize_title(directory)
+                # Calculate string similarity between media title and directory name
+                similarity = SequenceMatcher(None, normalized_media_title, normalized_dir_name).ratio()
+
+                # Log the comparison for debugging
+                app.logger.info(f"Comparing '{media_title}' (normalized: '{normalized_media_title}') with directory '{directory}' (normalized: '{normalized_dir_name}'). Similarity: {similarity:.3f}")
+
+                # Update best match if current similarity is higher
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_match_dir = os.path.join(base_folder, directory)
+                    app.logger.info(f"New best match: '{directory}' with similarity {similarity:.3f}")
+
+                # Check for exact match (case-insensitive and normalized)
+                if normalized_media_title == normalized_dir_name:
+                    save_dir = os.path.join(base_folder, directory)
+                    app.logger.info(f"Exact match found: '{directory}'")
+                    break
+
+            if save_dir:
                 break
 
-        if not save_dir:
-            app.logger.error(f"Directory not found for folder name: {folder_name}")
-            return f"Directory not found: {folder_name}", 404
+        # Log final matching result
+        app.logger.info(f"Best similarity: {best_similarity:.3f}, Best match dir: {best_match_dir}, Exact match dir: {save_dir}")
 
-        # Save the backdrop and create a thumbnail
-        local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, folder_name, save_dir)
-        if local_backdrop_path:
-            message = f"Backdrop for '{folder_name}' has been downloaded!"
-            send_slack_notification(message, local_backdrop_path, backdrop_url)
+        # If an exact match is found, proceed with downloading
+        if save_dir:
+            # Save the TMDb ID mapping for future use
+            if tmdb_id:
+                save_mapped_directory(tmdb_id, media_type, save_dir)
 
-        # Redirect back to the appropriate page with the anchor for the folder
-        return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(folder_name)}")
+            local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
+            if local_backdrop_path:
+                # Send Slack notification about successful backdrop download
+                message = f"Backdrop for '{media_title}' has been downloaded!"
+                send_slack_notification(message, local_backdrop_path, backdrop_url)
+            return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
 
+        # If no exact match, use best similarity match above a threshold
+        # Increased threshold to 0.9 to prevent false matches between similar titles
+        similarity_threshold = 0.9
+        if best_similarity >= similarity_threshold:
+            app.logger.info(f"Using best match '{best_match_dir}' (similarity: {best_similarity:.3f})")
+            save_dir = best_match_dir
+
+            # Save the TMDb ID mapping for future use
+            if tmdb_id:
+                save_mapped_directory(tmdb_id, media_type, save_dir)
+
+            local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
+            if local_backdrop_path:
+                # Send Slack notification about successful backdrop download
+                message = f"Backdrop for '{media_title}' has been downloaded!"
+                send_slack_notification(message, local_backdrop_path, backdrop_url)
+            return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
+
+        # If no suitable directory found, present user with directory selection options
+        similar_dirs = get_close_matches(media_title, possible_dirs, n=5, cutoff=0.5)
+        return render_template('select_directory.html', similar_dirs=similar_dirs, media_title=media_title, backdrop_path=backdrop_url, media_type=media_type, tmdb_id=tmdb_id)
+
+    except FileNotFoundError as fnf_error:
+        # Log and handle file not found errors
+        app.logger.error("File not found: %s", fnf_error)
+        return "Directory not found", 404
     except Exception as e:
-        app.logger.exception(f"Error in select_backdrop: {e}")
-        return f"Error: {str(e)}", 500
+        # Log and handle any unexpected errors
+        app.logger.exception("Unexpected error in select_backdrop route: %s", e)
+        return "Internal Server Error", 500
     
 ## Route for manually confirming the directory and saving the backdrop
 @app.route('/confirm_backdrop_directory', methods=['POST'])
@@ -465,10 +615,11 @@ def confirm_backdrop_directory():
     selected_directory = request.form.get('selected_directory')
     media_title = request.form.get('media_title')
     backdrop_url = request.form.get('backdrop_path')
-    content_type = request.form.get('content_type', 'movie')  # Default to 'movie'
+    content_type = request.form.get('media_type', 'movie')  # Use 'media_type' to match the form field
+    tmdb_id = request.form.get('tmdb_id')  # Get TMDb ID if available
 
     # Log all received form data for debugging
-    app.logger.info(f"Received data: selected_directory={selected_directory}, media_title={media_title}, backdrop_url={backdrop_url}, content_type={content_type}")
+    app.logger.info(f"Received data: selected_directory={selected_directory}, media_title={media_title}, backdrop_url={backdrop_url}, content_type={content_type}, tmdb_id={tmdb_id}")
 
     # Validate form data
     if not selected_directory or not media_title or not backdrop_url:
@@ -489,6 +640,11 @@ def confirm_backdrop_directory():
         # Log an error if directory not found
         app.logger.error(f"Selected directory '{selected_directory}' not found in base folders.")
         return "Directory not found", 404
+
+    # Save the TMDb ID mapping for future use (this is the key part - remember this selection!)
+    if tmdb_id:
+        save_mapped_directory(tmdb_id, content_type, save_dir)
+        app.logger.info(f"Saved mapping for future: {content_type}_{tmdb_id} -> {save_dir}")
 
     # Save the backdrop and get the local path
     local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)

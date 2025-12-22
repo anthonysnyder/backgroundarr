@@ -86,16 +86,16 @@
                 <div class="movie-card" id="{{ tv_show.clean_id }}" data-title="{{ tv_show.title | lower }}" data-has-backdrop="{{ tv_show.has_backdrop | lower }}">
                     <div>
                         {% if tv_show.backdrop_thumb %}
-                        <img src="{{ tv_show.backdrop_thumb }}" alt="{{ tv_show.title }}" onclick="triggerSearch('{{ tv_show.title | escapejs }}', 'tv')">
+                        <img src="{{ tv_show.backdrop_thumb }}" alt="{{ tv_show.title }}" onclick="triggerSearch('{{ tv_show.title }}', 'tv', '{{ tv_show.title }}')">
                         {% elif tv_show.backdrop %}
-                        <img src="{{ tv_show.backdrop }}" alt="{{ tv_show.title }}" onclick="triggerSearch('{{ tv_show.title | escapejs }}', 'tv')">
+                        <img src="{{ tv_show.backdrop }}" alt="{{ tv_show.title }}" onclick="triggerSearch('{{ tv_show.title }}', 'tv', '{{ tv_show.title }}')">
                         {% else %}
                         <div class="img-thumbnail bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                             <span>No Backdrop</span>
                         </div>
                         {% endif %}
                     </div>
-                    <h5 class="mt-2 text-center" onclick="triggerSearch('{{ tv_show.title | escapejs }}', 'tv')">{{ tv_show.title }}</h5>
+                    <h5 class="mt-2 text-center" onclick="triggerSearch(`{{ tv_show.title }}`, 'tv', `{{ tv_show.title }}`)">{{ tv_show.title }}</h5>
                     <p class="text-center">
                         <strong>Dimensions:</strong> {{ tv_show.backdrop_dimensions }} | 
                         <strong>Last Modified:</strong> {{ tv_show.backdrop_last_modified }}
@@ -109,9 +109,16 @@
 
 <!-- JavaScript Section -->
 <script>
-    function triggerSearch(title, contentType) {
-        const folderName = title;
-        window.location.href = `/search_${contentType}?query=${encodeURIComponent(folderName)}&folder_name=${encodeURIComponent(folderName)}`;
+    // Function to trigger search
+    function triggerSearch(title, contentType, directoryName) {
+        // Clean title by removing year and special characters
+        const cleanTitle = title
+            .replace(/\(\d{4}\)/g, '') // Remove the year in parentheses
+            .replace(/[^a-zA-Z0-9\s]/g, '') // Remove all non-alphanumeric characters except spaces
+            .trim(); // Trim leading/trailing spaces
+
+        // Redirect with sanitized title AND the directory name
+        window.location.href = `/search_${contentType}?query=${encodeURIComponent(cleanTitle.toLowerCase())}&directory=${encodeURIComponent(directoryName)}`;
     }
 
     document.getElementById('searchInput').addEventListener('input', function () {
