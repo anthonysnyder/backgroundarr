@@ -46,13 +46,18 @@ TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 BASE_URL = "https://api.themoviedb.org/3"
 BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/original"
 
-# Define base folders for organizing movies and TV shows from environment variables
-movie_folders = os.getenv("MOVIE_FOLDERS").split(',')
-tv_folders = os.getenv("TV_FOLDERS").split(',')
+# Define base folders for organizing movies and TV shows
+# Environment variables allow flexible folder configuration without code changes
+movie_folders_env = os.getenv('MOVIE_FOLDERS', '/movies,/kids-movies,/anime')
+tv_folders_env = os.getenv('TV_FOLDERS', '/tv,/kids-tv')
 
-# Raise an error if these variables are not set
-if not movie_folders or not tv_folders:
-    raise ValueError("MOVIE_FOLDERS and TV_FOLDERS must be set in the environment variables.")
+# Parse comma-separated folder lists and filter out non-existent paths
+movie_folders = [folder.strip() for folder in movie_folders_env.split(',') if folder.strip() and os.path.exists(folder.strip())]
+tv_folders = [folder.strip() for folder in tv_folders_env.split(',') if folder.strip() and os.path.exists(folder.strip())]
+
+# Log the folders being used for verification
+app.logger.info(f"Movie folders: {movie_folders}")
+app.logger.info(f"TV folders: {tv_folders}")
 
 # Path to the mapping file that stores TMDb ID -> Directory relationships
 MAPPING_FILE = os.path.join(os.path.dirname(__file__), 'tmdb_directory_mapping.json')
