@@ -4,7 +4,7 @@ import re
 import urllib.parse
 import json
 import time
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, Response
 from difflib import get_close_matches, SequenceMatcher  # For string similarity
 from PIL import Image  # For image processing
 from datetime import datetime  # For handling dates and times
@@ -24,6 +24,23 @@ def safe_listdir(path: str, retries: int = 8, base_delay: float = 0.05):
             last_exc = e
             time.sleep(base_delay * (2 ** attempt))
     return []  # degrade gracefully, never 500
+
+# SMB-safe file reading helper
+def safe_send_file(path: str, retries: int = 8, base_delay: float = 0.05, **kwargs):
+    """
+    Safely send a file with retry logic for SMB mounts.
+    Handles BlockingIOError by retrying with exponential backoff.
+    """
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            return send_file(path, **kwargs)
+        except BlockingIOError as e:
+            last_exc = e
+            if attempt < retries - 1:  # Don't sleep on the last attempt
+                time.sleep(base_delay * (2 ** attempt))
+    # If all retries fail, raise the last exception
+    raise last_exc
 
 # Initialize Flask application for managing movie and TV show backdrops
 app = Flask(__name__)
@@ -473,8 +490,9 @@ def serve_backdrop(filename):
         if '@eaDir' in full_path:
             continue
         if os.path.exists(full_path):
-            # Serve the file from the appropriate directory
-            response = send_from_directory(base_folder, filename)
+            # Serve the file from the appropriate directory using safe_send_file
+            # to handle BlockingIOError on SMB mounts
+            response = safe_send_file(full_path)
             if refresh == 'true':
                 # If refresh is requested, set no-cache headers
                 response.cache_control.no_cache = True
