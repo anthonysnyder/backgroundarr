@@ -1,8 +1,10 @@
 # Base image with Python (multi-architecture support is native here)
 FROM python:3.12-slim
 
-# Install system dependencies required by Pillow
+# Install system dependencies required by Pillow (including build tools for ARM)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libc6-dev \
     libjpeg62-turbo-dev \
     zlib1g-dev \
     libfreetype6-dev \
