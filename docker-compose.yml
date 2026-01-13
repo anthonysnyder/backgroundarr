@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mediarr:
-    build: .
+    image: swguru2004/mediarr:latest
     container_name: mediarr
     ports:
       - "5000:5000"
@@ -16,7 +16,7 @@ services:
       - /path/to/your/movies:/movies
       - /path/to/your/tv:/tv
       # Persistent storage for mappings and unavailability data
-      - ./data:/app/data
+      - ./mediarr-data:/app
     restart: unless-stopped
     networks:
       - mediarr-network
