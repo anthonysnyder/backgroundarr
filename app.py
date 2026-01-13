@@ -132,10 +132,13 @@ app.logger.info(f"Movie folders: {movie_folders}")
 app.logger.info(f"TV folders: {tv_folders}")
 
 # Path to the mapping file that stores TMDb ID -> Directory relationships
-MAPPING_FILE = os.path.join(os.path.dirname(__file__), 'tmdb_directory_mapping.json')
+# Store in /app/data which has write permissions for non-root users
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+os.makedirs(DATA_DIR, exist_ok=True)  # Ensure data directory exists
+MAPPING_FILE = os.path.join(DATA_DIR, 'tmdb_directory_mapping.json')
 
 # Path to the artwork unavailability tracking file
-UNAVAILABLE_FILE = os.path.join(os.path.dirname(__file__), 'artwork_unavailable.json')
+UNAVAILABLE_FILE = os.path.join(DATA_DIR, 'artwork_unavailable.json')
 
 # ============================================================================
 # ARTWORK UNAVAILABILITY PERSISTENCE
