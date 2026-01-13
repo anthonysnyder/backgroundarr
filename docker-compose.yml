@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  mediarr:
+    build: .
+    container_name: mediarr
+    ports:
+      - "5000:5000"
+    environment:
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - MOVIE_FOLDERS=${MOVIE_FOLDERS:-/movies}
+      - TV_FOLDERS=${TV_FOLDERS:-/tv}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+    volumes:
+      # Mount your media folders (update these paths to match your setup)
+      - /path/to/your/movies:/movies
+      - /path/to/your/tv:/tv
+      # Persistent storage for mappings and unavailability data
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - mediarr-network
+
+networks:
+  mediarr-network:
+    driver: bridge
