@@ -4,7 +4,8 @@ import re
 import urllib.parse
 import json
 import time
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, Response
+import threading
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, send_file, Response, jsonify
 from difflib import get_close_matches, SequenceMatcher  # For string similarity
 from PIL import Image  # For image processing
 from datetime import datetime  # For handling dates and times
@@ -150,6 +151,59 @@ MAPPING_FILE = os.path.join(DATA_DIR, 'tmdb_directory_mapping.json')
 
 # Path to the artwork unavailability tracking file
 UNAVAILABLE_FILE = os.path.join(DATA_DIR, 'artwork_unavailable.json')
+
+# ============================================================================
+# BACKGROUND SCANNING CACHE
+# ============================================================================
+# Cache configuration
+CACHE_FILE = os.path.join(DATA_DIR, 'scan_cache.json')
+SCAN_INTERVAL = int(os.getenv('SCAN_INTERVAL_MINUTES', '5')) * 60  # Default 5 minutes
+scan_cache = {
+    'movies': {'data': [], 'count': 0, 'last_scan': None, 'scanning': False},
+    'tv': {'data': [], 'count': 0, 'last_scan': None, 'scanning': False}
+}
+scan_cache_lock = threading.Lock()
+
+def load_scan_cache():
+    """Load cached scan results from disk"""
+    global scan_cache
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                loaded = json.load(f)
+                with scan_cache_lock:
+                    scan_cache.update(loaded)
+                app.logger.info(f"Loaded scan cache: {scan_cache['movies']['count']} movies, {scan_cache['tv']['count']} TV shows")
+        except Exception as e:
+            app.logger.error(f"Error loading scan cache: {e}")
+
+def save_scan_cache():
+    """Save scan results to disk cache"""
+    try:
+        with scan_cache_lock:
+            with open(CACHE_FILE, 'w') as f:
+                json.dump(scan_cache, f)
+        app.logger.info("Scan cache saved to disk")
+    except Exception as e:
+        app.logger.error(f"Error saving scan cache: {e}")
+
+def get_cached_scan(media_type='movie'):
+    """Get cached scan results for a media type"""
+    with scan_cache_lock:
+        return (
+            scan_cache[media_type if media_type == 'tv' else 'movies']['data'],
+            scan_cache[media_type if media_type == 'tv' else 'movies']['count']
+        )
+
+def is_scanning(media_type='movie'):
+    """Check if a scan is currently in progress"""
+    with scan_cache_lock:
+        return scan_cache[media_type if media_type == 'tv' else 'movies']['scanning']
+
+def get_last_scan_time(media_type='movie'):
+    """Get the timestamp of the last successful scan"""
+    with scan_cache_lock:
+        return scan_cache[media_type if media_type == 'tv' else 'movies']['last_scan']
 
 # ============================================================================
 # ARTWORK UNAVAILABILITY PERSISTENCE
@@ -372,6 +426,73 @@ def scan_media_for_artwork(base_folders, media_type='movie'):
     return media_list, len(media_list)
 
 # ============================================================================
+# BACKGROUND SCANNING
+# ============================================================================
+
+def perform_background_scan(media_type='movie'):
+    """
+    Perform a scan in the background and update the cache.
+    This function is called by the background scanner thread.
+    """
+    cache_key = 'tv' if media_type == 'tv' else 'movies'
+
+    # Mark as scanning
+    with scan_cache_lock:
+        if scan_cache[cache_key]['scanning']:
+            app.logger.info(f"Scan already in progress for {media_type}, skipping")
+            return
+        scan_cache[cache_key]['scanning'] = True
+
+    try:
+        app.logger.info(f"Starting background scan for {media_type}...")
+        base_folders = tv_folders if media_type == 'tv' else movie_folders
+
+        # Perform the scan
+        media_list, count = scan_media_for_artwork(base_folders, media_type)
+
+        # Update cache
+        with scan_cache_lock:
+            scan_cache[cache_key]['data'] = media_list
+            scan_cache[cache_key]['count'] = count
+            scan_cache[cache_key]['last_scan'] = datetime.now().isoformat()
+            scan_cache[cache_key]['scanning'] = False
+
+        # Save to disk
+        save_scan_cache()
+
+        app.logger.info(f"Background scan complete for {media_type}: {count} items found")
+
+    except Exception as e:
+        app.logger.error(f"Error during background scan for {media_type}: {e}")
+        with scan_cache_lock:
+            scan_cache[cache_key]['scanning'] = False
+
+def background_scanner_thread():
+    """
+    Background thread that periodically scans media directories.
+    Runs every SCAN_INTERVAL seconds.
+    """
+    app.logger.info(f"Background scanner started (interval: {SCAN_INTERVAL}s)")
+
+    # Perform initial scan on startup
+    time.sleep(5)  # Wait for Flask to fully start
+    perform_background_scan('movie')
+    perform_background_scan('tv')
+
+    # Then scan periodically
+    while True:
+        time.sleep(SCAN_INTERVAL)
+        app.logger.info("Starting scheduled background scan...")
+        perform_background_scan('movie')
+        perform_background_scan('tv')
+
+def start_background_scanner():
+    """Start the background scanner thread"""
+    scanner_thread = threading.Thread(target=background_scanner_thread, daemon=True)
+    scanner_thread.start()
+    app.logger.info("Background scanner thread started")
+
+# ============================================================================
 # LEGACY FUNCTION (kept for backward compatibility during migration)
 # ============================================================================
 def get_backdrop_thumbnails(base_folders=None):
@@ -437,31 +558,43 @@ def get_backdrop_thumbnails(base_folders=None):
 # Route for the main index page showing movie collection with all artwork types
 @app.route('/')
 def index():
-    movies, total_movies = scan_media_for_artwork(movie_folders, 'movie')
+    # Use cached data instead of scanning on every request
+    movies, total_movies = get_cached_scan('movie')
+    last_scan = get_last_scan_time('movie')
+    scanning = is_scanning('movie')
 
     # Pass artwork types configuration to template
     return render_template('collection.html',
                          media=movies,
                          total_media=total_movies,
                          media_type='movie',
-                         artwork_types=ARTWORK_TYPES)
+                         artwork_types=ARTWORK_TYPES,
+                         last_scan=last_scan,
+                         scanning=scanning)
 
 # Route for TV shows page
 @app.route('/tv')
 def tv_shows():
-    tv_shows, total_tv_shows = scan_media_for_artwork(tv_folders, 'tv')
+    # Use cached data instead of scanning on every request
+    tv_shows, total_tv_shows = get_cached_scan('tv')
+    last_scan = get_last_scan_time('tv')
+    scanning = is_scanning('tv')
 
     # Pass artwork types configuration to template
     return render_template('collection.html',
                          media=tv_shows,
                          total_media=total_tv_shows,
                          media_type='tv',
-                         artwork_types=ARTWORK_TYPES)
+                         artwork_types=ARTWORK_TYPES,
+                         last_scan=last_scan,
+                         scanning=scanning)
 
 # Route to trigger a manual refresh of media directories
 @app.route('/refresh')
 def refresh():
-    get_backdrop_thumbnails()  # Re-scan the directories
+    # Trigger immediate background scan for both movies and TV
+    threading.Thread(target=perform_background_scan, args=('movie',), daemon=True).start()
+    threading.Thread(target=perform_background_scan, args=('tv',), daemon=True).start()
     return redirect(url_for('index'))
 
 # ============================================================================
@@ -1024,6 +1157,12 @@ def send_slack_notification(message, local_backdrop_path, backdrop_url):
 
 # Main entry point for running the Flask application
 if __name__ == '__main__':
+    # Load cached scan results from disk
+    load_scan_cache()
+
+    # Start background scanner thread
+    start_background_scanner()
+
     # Start the app, listening on all network interfaces at port 5000
     app.run(
         host="0.0.0.0",
