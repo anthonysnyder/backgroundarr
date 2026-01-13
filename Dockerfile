@@ -25,6 +25,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the app
 COPY . /app
 
+# Create data directory for persistent storage
+RUN mkdir -p /app/data
+
+# Set permissions so any user can read app files and write to data directory
+RUN chmod -R 755 /app && \
+    chmod -R 777 /app/data
+
 # Expose the port that Flask runs on
 EXPOSE 5000
 
