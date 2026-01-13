@@ -50,11 +50,11 @@ ARTWORK_TYPES = {
 }
 
 # SMB-safe directory listing helper
-def safe_listdir(path: str, retries: int = 15, base_delay: float = 0.5):
+def safe_listdir(path: str, retries: int = 10, base_delay: float = 0.05):
     """
     Safely list directory contents with retry logic for SMB mounts.
     Degrades gracefully on BlockingIOError instead of raising 500 errors.
-    Uses longer delays and more retries for flaky SMB mounts.
+    Uses exponential backoff with cap at 5 seconds to balance responsiveness and reliability.
     """
     last_exc = None
     for attempt in range(retries):
@@ -62,8 +62,8 @@ def safe_listdir(path: str, retries: int = 15, base_delay: float = 0.5):
             return os.listdir(path)
         except BlockingIOError as e:
             last_exc = e
-            # Cap maximum delay at 30 seconds to avoid extremely long waits
-            delay = min(base_delay * (2 ** attempt), 30.0)
+            # Cap maximum delay at 5 seconds for better responsiveness
+            delay = min(base_delay * (2 ** attempt), 5.0)
             app.logger.warning(f"BlockingIOError on {path}, attempt {attempt + 1}/{retries}, retrying in {delay:.2f}s")
             time.sleep(delay)
         except Exception as e:
