@@ -384,23 +384,42 @@
         });
     });
 
-    // Show Missing filter
+    // Track current artwork type filter and missing state
+    let currentArtworkFilter = 'poster'; // Default to poster
     let showingMissingOnly = false;
+
+    // Update button text based on current artwork filter
+    function updateShowMissingButtonText() {
+        const btn = document.getElementById('showMissingBtn');
+        const artworkName = {
+            'poster': 'Posters',
+            'logo': 'Logos',
+            'backdrop': 'Backdrops'
+        }[currentArtworkFilter];
+
+        if (showingMissingOnly) {
+            btn.textContent = 'Show All';
+        } else {
+            btn.textContent = `Show Missing ${artworkName}`;
+        }
+    }
+
+    // Show Missing filter - context aware
     document.getElementById('showMissingBtn').addEventListener('click', function() {
         showingMissingOnly = !showingMissingOnly;
         const mediaCards = document.querySelectorAll('.movie-card');
 
         if (showingMissingOnly) {
-            this.textContent = 'Show All';
             this.classList.remove('btn-primary');
             this.classList.add('btn-warning');
 
             mediaCards.forEach(card => {
-                const indicators = card.querySelectorAll('.artwork-indicator.missing');
-                card.style.display = indicators.length > 0 ? 'block' : 'none';
+                // Only show cards that are missing the currently selected artwork type
+                const indicator = card.querySelector(`.artwork-indicator[data-artwork-type="${currentArtworkFilter}"]`);
+                const isMissing = indicator && indicator.classList.contains('missing');
+                card.style.display = isMissing ? 'block' : 'none';
             });
         } else {
-            this.textContent = 'Show Missing';
             this.classList.remove('btn-warning');
             this.classList.add('btn-primary');
 
@@ -408,10 +427,38 @@
                 card.style.display = 'block';
             });
         }
+
+        updateShowMissingButtonText();
     });
 
-    // Click yellow indicators to mark as unavailable
+    // Handle artwork type selection in sidebar
+    document.querySelectorAll('[data-artwork-type]').forEach(item => {
+        item.addEventListener('click', function() {
+            // Update active state
+            document.querySelectorAll('[data-artwork-type]').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update current filter
+            currentArtworkFilter = this.dataset.artworkType;
+
+            // Update button text
+            updateShowMissingButtonText();
+
+            // If currently showing missing, re-filter with new artwork type
+            if (showingMissingOnly) {
+                const mediaCards = document.querySelectorAll('.movie-card');
+                mediaCards.forEach(card => {
+                    const indicator = card.querySelector(`.artwork-indicator[data-artwork-type="${currentArtworkFilter}"]`);
+                    const isMissing = indicator && indicator.classList.contains('missing');
+                    card.style.display = isMissing ? 'block' : 'none';
+                });
+            }
+        });
+    });
+
+    // Initialize button text on page load
     document.addEventListener('DOMContentLoaded', function() {
+        updateShowMissingButtonText();
         attachIndicatorClickHandlers();
     });
 
