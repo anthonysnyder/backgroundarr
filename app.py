@@ -10,6 +10,45 @@ from PIL import Image  # For image processing
 from datetime import datetime  # For handling dates and times
 from urllib.parse import unquote
 
+# ============================================================================
+# ARTWORK CONFIGURATION
+# ============================================================================
+# Configuration for all artwork types (posters, logos, backdrops)
+# This makes the code extensible and avoids hardcoding artwork-specific logic
+ARTWORK_TYPES = {
+    'poster': {
+        'name': 'Poster',
+        'emoji': '🎭',
+        'tmdb_key': 'posters',  # Key in TMDb API response
+        'base_filename': 'poster',
+        'extensions': ['jpg', 'jpeg', 'png'],
+        'thumbnail_size': (300, 450),
+        'aspect_ratio': (2, 3),
+        'filter_language': True,  # Filter to English only
+    },
+    'logo': {
+        'name': 'Logo',
+        'emoji': '🏷️',
+        'tmdb_key': 'logos',
+        'base_filename': 'logo',
+        'extensions': ['png', 'jpg', 'jpeg'],  # PNG preferred for transparency
+        'thumbnail_size': (300, 150),
+        'aspect_ratio': (2, 1),
+        'filter_language': False,  # Logos are often language-agnostic
+        'preferred_extension': 'png',  # For transparency
+    },
+    'backdrop': {
+        'name': 'Backdrop',
+        'emoji': '🎬',
+        'tmdb_key': 'backdrops',
+        'base_filename': 'backdrop',
+        'extensions': ['jpg', 'jpeg', 'png'],
+        'thumbnail_size': (300, 169),
+        'aspect_ratio': (16, 9),
+        'filter_language': False,
+    }
+}
+
 # SMB-safe directory listing helper
 def safe_listdir(path: str, retries: int = 8, base_delay: float = 0.05):
     """
@@ -95,6 +134,44 @@ app.logger.info(f"TV folders: {tv_folders}")
 # Path to the mapping file that stores TMDb ID -> Directory relationships
 MAPPING_FILE = os.path.join(os.path.dirname(__file__), 'tmdb_directory_mapping.json')
 
+# Path to the artwork unavailability tracking file
+UNAVAILABLE_FILE = os.path.join(os.path.dirname(__file__), 'artwork_unavailable.json')
+
+# ============================================================================
+# ARTWORK UNAVAILABILITY PERSISTENCE
+# ============================================================================
+
+def load_unavailable_artwork():
+    """
+    Load artwork unavailability data from JSON file.
+    Format: {"{media_type}_{tmdb_id}": {"poster": false, "logo": true, "backdrop": false}}
+    """
+    if os.path.exists(UNAVAILABLE_FILE):
+        try:
+            with open(UNAVAILABLE_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            app.logger.error(f"Error loading unavailable artwork file: {e}")
+            return {}
+    return {}
+
+def save_unavailable_artwork(data):
+    """Save artwork unavailability data to JSON file."""
+    try:
+        with open(UNAVAILABLE_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        app.logger.info(f"Saved unavailable artwork data to {UNAVAILABLE_FILE}")
+    except Exception as e:
+        app.logger.error(f"Error saving unavailable artwork file: {e}")
+
+def extract_tmdb_id(directory_name):
+    """
+    Extract TMDb ID from directory name like 'Movie Name (2014) {tmdb-12345}'.
+    Returns the TMDb ID as a string, or None if not found.
+    """
+    match = re.search(r'\{tmdb-(\d+)\}', directory_name)
+    return match.group(1) if match else None
+
 # Function to normalize movie/TV show titles for consistent searching and comparison
 def normalize_title(title):
     # Remove all non-alphanumeric characters and convert to lowercase
@@ -167,64 +244,122 @@ def save_mapped_directory(tmdb_id, media_type, directory_path):
 def backdrop_resolution(backdrop):
     return backdrop['width'] * backdrop['height']  # Calculate the area of the backdrop
 
-# Function to handle backdrop download and thumbnail creation
-def save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir):
-    # Define full paths for the backdrop and thumbnail
-    full_backdrop_path = os.path.join(save_dir, 'backdrop.jpg')
-    thumb_backdrop_path = os.path.join(save_dir, 'backdrop-thumb.jpg')
-
-    try:
-        # Remove any existing backdrop files in the directory
-        for ext in ['jpg', 'jpeg', 'png']:
-            existing_backdrop = os.path.join(save_dir, f'backdrop.{ext}')
-            existing_thumb = os.path.join(save_dir, f'backdrop-thumb.{ext}')
-            if os.path.exists(existing_backdrop):
-                os.remove(existing_backdrop)
-            if os.path.exists(existing_thumb):
-                os.remove(existing_thumb)
-
-        # Download the full-resolution backdrop from the URL
-        response = requests.get(backdrop_url)
-        if response.status_code == 200:
-            # Save the downloaded backdrop image
-            with open(full_backdrop_path, 'wb') as file:
-                file.write(response.content)
-
-            # Create a thumbnail using Pillow image processing library
-            with Image.open(full_backdrop_path) as img:
-                # Calculate aspect ratio to maintain consistent thumbnail dimensions
-                aspect_ratio = img.width / img.height
-                target_ratio = 16 / 9  # Desired backdrop ratio
-
-                # Crop the image to match the target aspect ratio
-                if aspect_ratio > target_ratio:
-                    # Image is wider than desired ratio, crop the sides
-                    new_width = int(img.height * target_ratio)
-                    left = (img.width - new_width) // 2
-                    img = img.crop((left, 0, left + new_width, img.height))
-                else:
-                    # Image is taller than desired ratio, crop the top and bottom
-                    new_height = int(img.width / target_ratio)
-                    top = (img.height - new_height) // 2
-                    img = img.crop((0, top, img.width, top + new_height))
-
-                # Resize the image to 300x169 pixels with high-quality Lanczos resampling
-                img = img.resize((300, 169), Image.LANCZOS)
-
-                # Save the thumbnail image with high JPEG quality
-                img.save(thumb_backdrop_path, "JPEG", quality=90)
-
-            print(f"Backdrop and thumbnail saved successfully for '{media_title}'")
-            return full_backdrop_path  # Return the local path where the backdrop was saved
-        else:
-            print(f"Failed to download backdrop for '{media_title}'. Status code: {response.status_code}")
-            return None
-
-    except Exception as e:
-        print(f"Error saving backdrop and generating thumbnail for '{media_title}': {e}")
-        return None
-
 # Function to retrieve media directories and their associated backdrop thumbnails
+# ============================================================================
+# GENERALIZED ARTWORK SCANNING
+# ============================================================================
+
+def scan_artwork_type(media_path, artwork_type, config, media_dir):
+    """
+    Scan for a specific artwork type in a media directory.
+    Returns dictionary with artwork paths, dimensions, last_modified, has_artwork status.
+    """
+    base_filename = config['base_filename']
+    extensions = config['extensions']
+
+    result = {
+        f'{artwork_type}': None,
+        f'{artwork_type}_thumb': None,
+        f'{artwork_type}_dimensions': None,
+        f'{artwork_type}_last_modified': None,
+        f'has_{artwork_type}': False
+    }
+
+    # Search for artwork files in order of preference
+    for ext in extensions:
+        thumb_path = os.path.join(media_path, f"{base_filename}-thumb.{ext}")
+        full_path = os.path.join(media_path, f"{base_filename}.{ext}")
+
+        # Check for thumbnail
+        if os.path.exists(thumb_path):
+            result[f'{artwork_type}_thumb'] = f"/artwork/{urllib.parse.quote(media_dir)}/{base_filename}-thumb.{ext}"
+
+        # Check for full artwork
+        if os.path.exists(full_path):
+            result[f'{artwork_type}'] = f"/artwork/{urllib.parse.quote(media_dir)}/{base_filename}.{ext}"
+            result[f'has_{artwork_type}'] = True
+
+            # Get dimensions
+            try:
+                with Image.open(full_path) as img:
+                    result[f'{artwork_type}_dimensions'] = f"{img.width}x{img.height}"
+            except Exception:
+                result[f'{artwork_type}_dimensions'] = "Unknown"
+
+            # Get last modified timestamp
+            try:
+                timestamp = os.path.getmtime(full_path)
+                result[f'{artwork_type}_last_modified'] = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
+            except Exception:
+                result[f'{artwork_type}_last_modified'] = None
+
+            break  # Found artwork, stop checking other extensions
+
+    return result
+
+def scan_media_for_artwork(base_folders, media_type='movie'):
+    """
+    Scan directories for all artwork types simultaneously (posters, logos, backdrops).
+    Returns list of media items with artwork status for all types.
+    """
+    if base_folders is None:
+        base_folders = movie_folders if media_type == 'movie' else tv_folders
+
+    media_list = []
+    unavailable_data = load_unavailable_artwork()
+
+    # Iterate through all base folders
+    for base_folder in base_folders:
+        for media_dir in sorted(safe_listdir(base_folder)):
+            # Skip Synology NAS system folders
+            if media_dir.lower() in ["@eadir", "#recycle"]:
+                continue
+
+            media_path = os.path.join(base_folder, media_dir)
+
+            if not os.path.isdir(media_path):
+                continue
+
+            # Extract TMDb ID from directory name (if present)
+            tmdb_id = extract_tmdb_id(media_dir)
+
+            # Strip TMDb ID pattern from title for display
+            clean_title = re.sub(r'\{tmdb-\d+\}', '', media_dir).strip()
+
+            # Create base media item
+            media_item = {
+                'title': clean_title,
+                'directory_name': media_dir,
+                'base_folder': base_folder,
+                'clean_id': generate_clean_id(media_dir),
+                'tmdb_id': tmdb_id
+            }
+
+            # Scan for each artwork type
+            for artwork_type, config in ARTWORK_TYPES.items():
+                artwork_data = scan_artwork_type(media_path, artwork_type, config, media_dir)
+                media_item.update(artwork_data)
+
+                # Check if this artwork type is marked as unavailable
+                if tmdb_id:
+                    unavailable_key = f"{media_type}_{tmdb_id}"
+                    if unavailable_key in unavailable_data:
+                        media_item[f'{artwork_type}_unavailable'] = \
+                            unavailable_data[unavailable_key].get(artwork_type, False)
+                    else:
+                        media_item[f'{artwork_type}_unavailable'] = False
+                else:
+                    media_item[f'{artwork_type}_unavailable'] = False
+
+            media_list.append(media_item)
+
+    # Sort by title, ignoring leading "The"
+    media_list = sorted(media_list, key=lambda x: strip_leading_the(x['title'].lower()))
+    return media_list, len(media_list)
+
+# ============================================================================
+# LEGACY FUNCTION (kept for backward compatibility during migration)
+# ============================================================================
 def get_backdrop_thumbnails(base_folders=None):
     # Default to movie folders if no folders specified
     if base_folders is None:
@@ -285,23 +420,29 @@ def get_backdrop_thumbnails(base_folders=None):
     media_list = sorted(media_list, key=lambda x: strip_leading_the(x['title'].lower()))
     return media_list, len(media_list)
 
-# Route for the main index page showing movie backdrops
+# Route for the main index page showing movie collection with all artwork types
 @app.route('/')
 def index():
-    movies, total_movies = get_backdrop_thumbnails(movie_folders)
-    
-    # Render the index page with movie thumbnails and total count
-    return render_template('index.html', movies=movies, total_movies=total_movies)
+    movies, total_movies = scan_media_for_artwork(movie_folders, 'movie')
+
+    # Pass artwork types configuration to template
+    return render_template('collection.html',
+                         media=movies,
+                         total_media=total_movies,
+                         media_type='movie',
+                         artwork_types=ARTWORK_TYPES)
 
 # Route for TV shows page
 @app.route('/tv')
 def tv_shows():
-    tv_shows, total_tv_shows = get_backdrop_thumbnails(tv_folders)
+    tv_shows, total_tv_shows = scan_media_for_artwork(tv_folders, 'tv')
 
-    # Log TV shows data for debugging
-    app.logger.info(f"Fetched TV shows: {tv_shows}")
-
-    return render_template('tv.html', tv_shows=tv_shows, total_tv_shows=total_tv_shows)
+    # Pass artwork types configuration to template
+    return render_template('collection.html',
+                         media=tv_shows,
+                         total_media=total_tv_shows,
+                         media_type='tv',
+                         artwork_types=ARTWORK_TYPES)
 
 # Route to trigger a manual refresh of media directories
 @app.route('/refresh')
@@ -309,11 +450,95 @@ def refresh():
     get_backdrop_thumbnails()  # Re-scan the directories
     return redirect(url_for('index'))
 
+# ============================================================================
+# API ROUTES FOR AJAX INTERACTIONS
+# ============================================================================
+
+@app.route('/api/toggle_unavailable', methods=['POST'])
+def toggle_unavailable():
+    """
+    Toggle artwork unavailability status for a specific media item.
+    Expects JSON: {tmdb_id, media_type, artwork_type}
+    Returns: {success, new_status}
+    """
+    try:
+        data = request.get_json()
+        tmdb_id = data.get('tmdb_id')
+        media_type = data.get('media_type')
+        artwork_type = data.get('artwork_type')
+
+        if not all([tmdb_id, media_type, artwork_type]):
+            return {'success': False, 'error': 'Missing required fields'}, 400
+
+        # Load current unavailability data
+        unavailable_data = load_unavailable_artwork()
+        key = f"{media_type}_{tmdb_id}"
+
+        # Initialize if doesn't exist
+        if key not in unavailable_data:
+            unavailable_data[key] = {}
+
+        # Toggle the status
+        current_status = unavailable_data[key].get(artwork_type, False)
+        new_status = not current_status
+        unavailable_data[key][artwork_type] = new_status
+
+        # Save back to file
+        save_unavailable_artwork(unavailable_data)
+
+        return {
+            'success': True,
+            'new_status': new_status
+        }
+    except Exception as e:
+        app.logger.error(f"Error toggling unavailability: {e}")
+        return {'success': False, 'error': str(e)}, 500
+
+@app.route('/api/stats')
+def get_stats():
+    """
+    Get collection statistics for progress bars.
+    Returns: {total, poster_count, logo_count, backdrop_count, percentages}
+    """
+    try:
+        media_type = request.args.get('media_type', 'movie')
+        folders = movie_folders if media_type == 'movie' else tv_folders
+
+        media_list, total = scan_media_for_artwork(folders, media_type)
+
+        # Count artwork by type
+        stats = {
+            'total': total,
+            'poster_count': sum(1 for m in media_list if m.get('has_poster')),
+            'logo_count': sum(1 for m in media_list if m.get('has_logo')),
+            'backdrop_count': sum(1 for m in media_list if m.get('has_backdrop')),
+        }
+
+        # Calculate percentages
+        if total > 0:
+            stats['poster_percent'] = round((stats['poster_count'] / total) * 100)
+            stats['logo_percent'] = round((stats['logo_count'] / total) * 100)
+            stats['backdrop_percent'] = round((stats['backdrop_count'] / total) * 100)
+        else:
+            stats['poster_percent'] = 0
+            stats['logo_percent'] = 0
+            stats['backdrop_percent'] = 0
+
+        return stats
+    except Exception as e:
+        app.logger.error(f"Error getting stats: {e}")
+        return {'error': str(e)}, 500
+
+# ============================================================================
+# SEARCH AND SELECTION ROUTES
+# ============================================================================
+
 @app.route('/search_movie', methods=['GET'])
 def search_movie():
-    # Get search query and directory name from URL parameters
+    # Get search query, directory name, and artwork type from URL parameters
     query = request.args.get('query', '')
     directory = request.args.get('directory', '')  # Get the directory name from the original movie card click
+    artwork_type = request.args.get('artwork_type', 'poster')  # Default to poster if not specified
 
     # Search movies on TMDb using the API
     response = requests.get(f"{BASE_URL}/search/movie", params={"api_key": TMDB_API_KEY, "query": query})
@@ -324,8 +549,8 @@ def search_movie():
         result['clean_id'] = generate_clean_id(result['title'])
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
 
-    # Render search results template with directory name
-    return render_template('search_results.html', query=query, results=results, directory=directory)
+    # Render search results template with directory name and artwork type
+    return render_template('search_results.html', query=query, results=results, directory=directory, artwork_type=artwork_type, media_type='movie')
 
 # Route for searching TV shows using TMDb API
 @app.route('/search_tv', methods=['GET'])
@@ -333,9 +558,10 @@ def search_tv():
     # Decode the URL-encoded query parameter to handle special characters
     query = unquote(request.args.get('query', ''))
     directory = request.args.get('directory', '')  # Get the directory name from the original TV show card click
+    artwork_type = request.args.get('artwork_type', 'poster')  # Default to poster if not specified
 
     # Log the received search query for debugging purposes
-    app.logger.info(f"Search TV query received: {query}, Directory: {directory}")
+    app.logger.info(f"Search TV query received: {query}, Directory: {directory}, Artwork Type: {artwork_type}")
 
     # Send search request to TMDb API for TV shows, with filters for English-language results
     response = requests.get(f"{BASE_URL}/search/tv", params={
@@ -356,14 +582,18 @@ def search_tv():
         result['backdrop_url'] = f"{BACKDROP_BASE_URL}{result.get('backdrop_path')}" if result.get('backdrop_path') else None
         app.logger.info(f"Result processed: {result['name']} -> Clean ID: {result['clean_id']}")
 
-    # Render search results template with TV show results and directory name
-    return render_template('search_results.html', query=query, results=results, content_type="tv", directory=directory)
+    # Render search results template with TV show results, directory name, and artwork type
+    return render_template('search_results.html', query=query, results=results, content_type="tv", directory=directory, artwork_type=artwork_type, media_type='tv')
     
-# Route for selecting a movie and displaying available backdrops
-@app.route('/select_movie/<int:movie_id>', methods=['GET'])
-def select_movie(movie_id):
+# Generalized route for selecting artwork (poster, logo, or backdrop) for a movie
+@app.route('/select_artwork/movie/<int:movie_id>/<artwork_type>', methods=['GET'])
+def select_movie_artwork(movie_id, artwork_type):
     # Get the directory name passed from the search results
     directory = request.args.get('directory', '')
+
+    # Validate artwork type
+    if artwork_type not in ARTWORK_TYPES:
+        return "Invalid artwork type", 400
 
     # Fetch detailed information about the selected movie from TMDb API
     movie_details = requests.get(f"{BASE_URL}/movie/{movie_id}", params={"api_key": TMDB_API_KEY}).json()
@@ -372,28 +602,42 @@ def select_movie(movie_id):
     movie_title = movie_details.get('title', '')
     clean_id = generate_clean_id(movie_title)
 
-    app.logger.info(f"Selected movie: {movie_title}, Directory from click: {directory}")
+    app.logger.info(f"Selected movie: {movie_title}, Artwork type: {artwork_type}, Directory from click: {directory}")
 
-    # Request available backdrops for the selected movie from TMDb API
-    backdrops = requests.get(f"{BASE_URL}/movie/{movie_id}/images", params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
+    # Get the configuration for this artwork type
+    artwork_config = ARTWORK_TYPES[artwork_type]
 
-    # Sort backdrops by resolution in descending order (highest resolution first)
-    backdrops_sorted = sorted(backdrops, key=backdrop_resolution, reverse=True)
+    # Request available artwork for the selected movie from TMDb API
+    images_response = requests.get(f"{BASE_URL}/movie/{movie_id}/images", params={"api_key": TMDB_API_KEY}).json()
+    artworks = images_response.get(artwork_config['tmdb_key'], [])
 
-    # Format backdrop details for display, including full URL and dimensions
-    formatted_backdrops = [{
-        'url': f"{BACKDROP_BASE_URL}{backdrop['file_path']}",
-        'size': f"{backdrop['width']}x{backdrop['height']}"
-    } for backdrop in backdrops_sorted]
+    # Sort by vote average (popularity) by default
+    artworks_sorted = sorted(artworks, key=lambda x: x.get('vote_average', 0), reverse=True)
 
-    # Render backdrop selection template with sorted backdrops, movie details, TMDb ID, and DIRECTORY
-    return render_template('backdrop_selection.html', media_title=movie_title, content_type='movie', backdrops=formatted_backdrops, tmdb_id=movie_id, directory=directory)
+    # Add full URL to each artwork
+    for artwork in artworks_sorted:
+        artwork['url'] = f"{BACKDROP_BASE_URL}{artwork['file_path']}"
 
-# Route for selecting a TV show and displaying available backdrops
-@app.route('/select_tv/<int:tv_id>', methods=['GET'])
-def select_tv(tv_id):
+    # Render artwork selection template
+    return render_template('artwork_selection.html',
+                         artworks=artworks_sorted,
+                         media_title=movie_title,
+                         media_type='movie',
+                         artwork_type=artwork_type,
+                         artwork_config=artwork_config,
+                         artwork_base_url=BACKDROP_BASE_URL,
+                         tmdb_id=movie_id,
+                         directory=directory)
+
+# Generalized route for selecting artwork (poster, logo, or backdrop) for a TV show
+@app.route('/select_artwork/tv/<int:tv_id>/<artwork_type>', methods=['GET'])
+def select_tv_artwork(tv_id, artwork_type):
     # Get the directory name passed from the search results
     directory = request.args.get('directory', '')
+
+    # Validate artwork type
+    if artwork_type not in ARTWORK_TYPES:
+        return "Invalid artwork type", 400
 
     # Fetch detailed information about the selected TV show from TMDb API
     tv_details = requests.get(f"{BASE_URL}/tv/{tv_id}", params={"api_key": TMDB_API_KEY}).json()
@@ -402,54 +646,74 @@ def select_tv(tv_id):
     tv_title = tv_details.get('name', '')
     clean_id = generate_clean_id(tv_title)
 
-    app.logger.info(f"Selected TV show: {tv_title}, Directory from click: {directory}")
+    app.logger.info(f"Selected TV show: {tv_title}, Artwork type: {artwork_type}, Directory from click: {directory}")
 
-    # Request available backdrops for the selected TV show from TMDb API
-    backdrops = requests.get(f"{BASE_URL}/tv/{tv_id}/images", params={"api_key": TMDB_API_KEY}).json().get('backdrops', [])
+    # Get the configuration for this artwork type
+    artwork_config = ARTWORK_TYPES[artwork_type]
 
-    # Sort backdrops by resolution in descending order (highest resolution first)
-    backdrops_sorted = sorted(backdrops, key=backdrop_resolution, reverse=True)
+    # Request available artwork for the selected TV show from TMDb API
+    images_response = requests.get(f"{BASE_URL}/tv/{tv_id}/images", params={"api_key": TMDB_API_KEY}).json()
+    artworks = images_response.get(artwork_config['tmdb_key'], [])
 
-    # Format backdrop details for display, including full URL and dimensions
-    formatted_backdrops = [{
-        'url': f"{BACKDROP_BASE_URL}{backdrop['file_path']}",
-        'size': f"{backdrop['width']}x{backdrop['height']}"
-    } for backdrop in backdrops_sorted]
+    # Sort by vote average (popularity) by default
+    artworks_sorted = sorted(artworks, key=lambda x: x.get('vote_average', 0), reverse=True)
 
-    # Render backdrop selection template with sorted backdrops, TV show details, content type, TMDb ID, and DIRECTORY
-    return render_template('backdrop_selection.html', backdrops=formatted_backdrops, media_title=tv_title, clean_id=clean_id, content_type="tv", tmdb_id=tv_id, directory=directory)
+    # Add full URL to each artwork
+    for artwork in artworks_sorted:
+        artwork['url'] = f"{BACKDROP_BASE_URL}{artwork['file_path']}"
 
-# Function to handle backdrop download and thumbnail creation
-def save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir):
-    # Define full paths for the backdrop and thumbnail
-    full_backdrop_path = os.path.join(save_dir, 'backdrop.jpg')
-    thumb_backdrop_path = os.path.join(save_dir, 'backdrop-thumb.jpg')
+    # Render artwork selection template
+    return render_template('artwork_selection.html',
+                         artworks=artworks_sorted,
+                         media_title=tv_title,
+                         media_type='tv',
+                         artwork_type=artwork_type,
+                         artwork_config=artwork_config,
+                         artwork_base_url=BACKDROP_BASE_URL,
+                         tmdb_id=tv_id,
+                         directory=directory)
+
+# Generalized function to handle artwork download and thumbnail creation
+def save_artwork_and_thumbnail(artwork_url, media_title, save_dir, artwork_type):
+    """Download artwork and generate thumbnail for any artwork type (poster/logo/backdrop)."""
+    config = ARTWORK_TYPES[artwork_type]
+    base_filename = config['base_filename']
+    extensions = config['extensions']
+    thumbnail_size = config['thumbnail_size']
+    aspect_ratio = config['aspect_ratio']
+
+    # Determine preferred extension for saving (PNG for logos, JPG for others)
+    preferred_ext = config.get('preferred_extension', 'jpg')
+
+    # Define full paths for the artwork and thumbnail
+    full_artwork_path = os.path.join(save_dir, f'{base_filename}.{preferred_ext}')
+    thumb_artwork_path = os.path.join(save_dir, f'{base_filename}-thumb.{preferred_ext}')
 
     try:
-        # Remove any existing backdrop files in the directory
-        for ext in ['jpg', 'jpeg', 'png']:
-            existing_backdrop = os.path.join(save_dir, f'backdrop.{ext}')
-            existing_thumb = os.path.join(save_dir, f'backdrop-thumb.{ext}')
-            if os.path.exists(existing_backdrop):
-                os.remove(existing_backdrop)
+        # Remove any existing artwork files in the directory
+        for ext in extensions:
+            existing_artwork = os.path.join(save_dir, f'{base_filename}.{ext}')
+            existing_thumb = os.path.join(save_dir, f'{base_filename}-thumb.{ext}')
+            if os.path.exists(existing_artwork):
+                os.remove(existing_artwork)
             if os.path.exists(existing_thumb):
                 os.remove(existing_thumb)
 
-        # Download the full-resolution backdrop from the URL
-        response = requests.get(backdrop_url)
+        # Download the full-resolution artwork from the URL
+        response = requests.get(artwork_url)
         if response.status_code == 200:
-            # Save the downloaded backdrop image
-            with open(full_backdrop_path, 'wb') as file:
+            # Save the downloaded artwork image
+            with open(full_artwork_path, 'wb') as file:
                 file.write(response.content)
 
             # Create a thumbnail using Pillow image processing library
-            with Image.open(full_backdrop_path) as img:
+            with Image.open(full_artwork_path) as img:
                 # Calculate aspect ratio to maintain consistent thumbnail dimensions
-                aspect_ratio = img.width / img.height
-                target_ratio = 16 / 9  # Desired backdrop ratio
+                img_aspect_ratio = img.width / img.height
+                target_ratio = aspect_ratio[0] / aspect_ratio[1]
 
                 # Crop the image to match the target aspect ratio
-                if aspect_ratio > target_ratio:
+                if img_aspect_ratio > target_ratio:
                     # Image is wider than desired ratio, crop the sides
                     new_width = int(img.height * target_ratio)
                     left = (img.width - new_width) // 2
@@ -460,25 +724,28 @@ def save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir):
                     top = (img.height - new_height) // 2
                     img = img.crop((0, top, img.width, top + new_height))
 
-                # Resize the image to 300x169 pixels with high-quality Lanczos resampling
-                img = img.resize((300, 169), Image.LANCZOS)
+                # Resize the image to thumbnail size with high-quality Lanczos resampling
+                img = img.resize(thumbnail_size, Image.LANCZOS)
 
-                # Save the thumbnail image with high JPEG quality
-                img.save(thumb_backdrop_path, "JPEG", quality=90)
+                # Save the thumbnail image with appropriate format and quality
+                if preferred_ext == 'png':
+                    img.save(thumb_artwork_path, "PNG", optimize=True)
+                else:
+                    img.save(thumb_artwork_path, "JPEG", quality=90)
 
-            print(f"Backdrop and thumbnail saved successfully for '{media_title}'")
-            return full_backdrop_path  # Return the local path where the backdrop was saved
+            app.logger.info(f"{config['name']} and thumbnail saved successfully for '{media_title}'")
+            return full_artwork_path  # Return the local path where the artwork was saved
         else:
-            print(f"Failed to download backdrop for '{media_title}'. Status code: {response.status_code}")
+            app.logger.error(f"Failed to download {artwork_type} for '{media_title}'. Status code: {response.status_code}")
             return None
 
     except Exception as e:
-        print(f"Error saving backdrop and generating thumbnail for '{media_title}': {e}")
+        app.logger.error(f"Error saving {artwork_type} and generating thumbnail for '{media_title}': {e}")
         return None
     
-    # Route for serving backdrops from the file system
-@app.route('/backdrop/<path:filename>')
-def serve_backdrop(filename):
+    # Route for serving artwork files (posters, logos, backdrops) from the file system
+@app.route('/artwork/<path:filename>')
+def serve_artwork(filename):
     # Combine movie and TV folders to search both sets of paths
     base_folders = movie_folders + tv_folders
 
@@ -508,26 +775,27 @@ def serve_backdrop(filename):
     return "File not found", 404
 
 # Route for handling backdrop selection and downloading
-@app.route('/select_backdrop', methods=['POST'])
-def select_backdrop():
+@app.route('/save_artwork', methods=['POST'])
+def save_artwork():
     # Log the received form data for debugging and tracking
     app.logger.info("Received form data: %s", request.form)
 
     # Validate that all required form data is present
-    if 'backdrop_path' not in request.form or 'media_title' not in request.form or 'media_type' not in request.form:
+    if 'artwork_path' not in request.form or 'media_title' not in request.form or 'media_type' not in request.form or 'artwork_type' not in request.form:
         app.logger.error("Missing form data: %s", request.form)
         return "Bad Request: Missing form data", 400
 
     try:
-        # Extract form data for backdrop download
-        backdrop_url = request.form['backdrop_path']
+        # Extract form data for artwork download
+        artwork_url = request.form['artwork_path']
         media_title = request.form['media_title']
         media_type = request.form['media_type']  # Should be either 'movie' or 'tv'
+        artwork_type = request.form['artwork_type']  # Should be 'poster', 'logo', or 'backdrop'
         tmdb_id = request.form.get('tmdb_id')  # Get TMDb ID if available
         directory = request.form.get('directory', '')  # Get the directory name from the original card click!
 
-        # Log detailed information about the backdrop selection
-        app.logger.info(f"Backdrop Path: {backdrop_url}, Media Title: {media_title}, Media Type: {media_type}, TMDb ID: {tmdb_id}, Directory: {directory}")
+        # Log detailed information about the artwork selection
+        app.logger.info(f"Artwork Path: {artwork_url}, Media Title: {media_title}, Media Type: {media_type}, Artwork Type: {artwork_type}, TMDb ID: {tmdb_id}, Directory: {directory}")
 
         # Select base folders based on media type (movies or TV shows)
         base_folders = movie_folders if media_type == 'movie' else tv_folders
@@ -549,11 +817,12 @@ def select_backdrop():
                     # Save the TMDb ID mapping for future use
                     if tmdb_id:
                         save_mapped_directory(tmdb_id, media_type, save_dir)
-                    # Save the backdrop
-                    local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-                    if local_backdrop_path:
-                        message = f"Backdrop for '{media_title}' has been downloaded!"
-                        send_slack_notification(message, local_backdrop_path, backdrop_url)
+                    # Save the artwork
+                    local_artwork_path = save_artwork_and_thumbnail(artwork_url, media_title, save_dir, artwork_type)
+                    if local_artwork_path:
+                        artwork_name = ARTWORK_TYPES[artwork_type]['name']
+                        message = f"{artwork_name} for '{media_title}' has been downloaded!"
+                        send_slack_notification(message, local_artwork_path, artwork_url)
                     return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
 
         # SECOND: Check if we have a saved mapping for this TMDb ID
@@ -563,10 +832,11 @@ def select_backdrop():
                 app.logger.info(f"Using previously saved directory mapping for {media_type}_{tmdb_id}: {mapped_dir}")
                 save_dir = mapped_dir
                 # Skip the fuzzy matching logic and go straight to saving
-                local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-                if local_backdrop_path:
-                    message = f"Backdrop for '{media_title}' has been downloaded!"
-                    send_slack_notification(message, local_backdrop_path, backdrop_url)
+                local_artwork_path = save_artwork_and_thumbnail(artwork_url, media_title, save_dir, artwork_type)
+                if local_artwork_path:
+                    artwork_name = ARTWORK_TYPES[artwork_type]['name']
+                    message = f"{artwork_name} for '{media_title}' has been downloaded!"
+                    send_slack_notification(message, local_artwork_path, artwork_url)
                 return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
 
         # Normalize media title for comparison
@@ -609,11 +879,12 @@ def select_backdrop():
             if tmdb_id:
                 save_mapped_directory(tmdb_id, media_type, save_dir)
 
-            local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-            if local_backdrop_path:
-                # Send Slack notification about successful backdrop download
-                message = f"Backdrop for '{media_title}' has been downloaded!"
-                send_slack_notification(message, local_backdrop_path, backdrop_url)
+            local_artwork_path = save_artwork_and_thumbnail(artwork_url, media_title, save_dir, artwork_type)
+            if local_artwork_path:
+                # Send Slack notification about successful artwork download
+                artwork_name = ARTWORK_TYPES[artwork_type]['name']
+                message = f"{artwork_name} for '{media_title}' has been downloaded!"
+                send_slack_notification(message, local_artwork_path, artwork_url)
             return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
 
         # If no exact match, use best similarity match above a threshold
@@ -627,16 +898,17 @@ def select_backdrop():
             if tmdb_id:
                 save_mapped_directory(tmdb_id, media_type, save_dir)
 
-            local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-            if local_backdrop_path:
-                # Send Slack notification about successful backdrop download
-                message = f"Backdrop for '{media_title}' has been downloaded!"
-                send_slack_notification(message, local_backdrop_path, backdrop_url)
+            local_artwork_path = save_artwork_and_thumbnail(artwork_url, media_title, save_dir, artwork_type)
+            if local_artwork_path:
+                # Send Slack notification about successful artwork download
+                artwork_name = ARTWORK_TYPES[artwork_type]['name']
+                message = f"{artwork_name} for '{media_title}' has been downloaded!"
+                send_slack_notification(message, local_artwork_path, artwork_url)
             return redirect(url_for('tv_shows' if media_type == 'tv' else 'index') + f"#{generate_clean_id(media_title)}")
 
         # If no suitable directory found, present user with directory selection options
         similar_dirs = get_close_matches(media_title, possible_dirs, n=5, cutoff=0.5)
-        return render_template('select_directory.html', similar_dirs=similar_dirs, media_title=media_title, backdrop_path=backdrop_url, media_type=media_type, tmdb_id=tmdb_id)
+        return render_template('select_directory.html', similar_dirs=similar_dirs, media_title=media_title, artwork_path=artwork_url, media_type=media_type, tmdb_id=tmdb_id, artwork_type=artwork_type)
 
     except FileNotFoundError as fnf_error:
         # Log and handle file not found errors
@@ -644,26 +916,27 @@ def select_backdrop():
         return "Directory not found", 404
     except Exception as e:
         # Log and handle any unexpected errors
-        app.logger.exception("Unexpected error in select_backdrop route: %s", e)
+        app.logger.exception("Unexpected error in save_artwork route: %s", e)
         return "Internal Server Error", 500
     
-## Route for manually confirming the directory and saving the backdrop
-@app.route('/confirm_backdrop_directory', methods=['POST'])
-def confirm_backdrop_directory():
-    # Extract form data for manual backdrop directory selection
+## Route for manually confirming the directory and saving artwork
+@app.route('/confirm_artwork_directory', methods=['POST'])
+def confirm_artwork_directory():
+    # Extract form data for manual artwork directory selection
     selected_directory = request.form.get('selected_directory')
     media_title = request.form.get('media_title')
-    backdrop_url = request.form.get('backdrop_path')
+    artwork_url = request.form.get('artwork_path')
     content_type = request.form.get('media_type', 'movie')  # Use 'media_type' to match the form field
+    artwork_type = request.form.get('artwork_type', 'poster')  # Get artwork type
     tmdb_id = request.form.get('tmdb_id')  # Get TMDb ID if available
 
     # Log all received form data for debugging
-    app.logger.info(f"Received data: selected_directory={selected_directory}, media_title={media_title}, backdrop_url={backdrop_url}, content_type={content_type}, tmdb_id={tmdb_id}")
+    app.logger.info(f"Received data: selected_directory={selected_directory}, media_title={media_title}, artwork_url={artwork_url}, content_type={content_type}, artwork_type={artwork_type}, tmdb_id={tmdb_id}")
 
     # Validate form data
-    if not selected_directory or not media_title or not backdrop_url:
-        app.logger.error("Missing form data: selected_directory=%s, media_title=%s, backdrop_url=%s",
-                         selected_directory, media_title, backdrop_url)
+    if not selected_directory or not media_title or not artwork_url:
+        app.logger.error("Missing form data: selected_directory=%s, media_title=%s, artwork_url=%s",
+                         selected_directory, media_title, artwork_url)
         return "Bad Request: Missing form data", 400
 
     # Find the correct base folder for the selected directory
@@ -685,16 +958,17 @@ def confirm_backdrop_directory():
         save_mapped_directory(tmdb_id, content_type, save_dir)
         app.logger.info(f"Saved mapping for future: {content_type}_{tmdb_id} -> {save_dir}")
 
-    # Save the backdrop and get the local path
-    local_backdrop_path = save_backdrop_and_thumbnail(backdrop_url, media_title, save_dir)
-    if local_backdrop_path:
+    # Save the artwork and get the local path
+    local_artwork_path = save_artwork_and_thumbnail(artwork_url, media_title, save_dir, artwork_type)
+    if local_artwork_path:
         # Send Slack notification about successful download
-        message = f"Backdrop for '{media_title}' has been downloaded!"
-        send_slack_notification(message, local_backdrop_path, backdrop_url)
-        app.logger.info(f"Backdrop successfully saved to {local_backdrop_path}")
+        artwork_name = ARTWORK_TYPES[artwork_type]['name']
+        message = f"{artwork_name} for '{media_title}' has been downloaded!"
+        send_slack_notification(message, local_artwork_path, artwork_url)
+        app.logger.info(f"{artwork_name} successfully saved to {local_artwork_path}")
     else:
-        app.logger.error(f"Failed to save backdrop for '{media_title}'")
-        return "Failed to save backdrop", 500
+        app.logger.error(f"Failed to save {artwork_type} for '{media_title}'")
+        return f"Failed to save {artwork_type}", 500
 
     # Generate clean ID for navigation anchor
     anchor = generate_clean_id(media_title)

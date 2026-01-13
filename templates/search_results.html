@@ -67,8 +67,8 @@
                         <strong>First Air Date:</strong> {{ result.first_air_date }}
                         {% endif %}
                     </p>
-                    <!-- Button to select the result and proceed to the next step -->
-                    <form action="{% if content_type == 'tv' %}{{ url_for('select_tv', tv_id=result.id) }}{% else %}{{ url_for('select_movie', movie_id=result.id) }}{% endif %}" method="GET">
+                    <!-- Button to select the result and proceed to artwork selection -->
+                    <form action="{% if content_type == 'tv' %}{{ url_for('select_tv_artwork', tv_id=result.id, artwork_type=artwork_type) }}{% else %}{{ url_for('select_movie_artwork', movie_id=result.id, artwork_type=artwork_type) }}{% endif %}" method="GET">
                         <input type="hidden" name="directory" value="{{ directory }}">
                         <button type="submit" class="btn btn-primary">Select</button>
                     </form>

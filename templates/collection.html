@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Collection - {{ media_type|title }}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #343a40;
+            color: #fff;
+        }
+        #wrapper {
+            display: flex;
+            width: 100%;
+        }
+        #sidebar-wrapper {
+            width: 250px;
+            background-color: #212529;
+            border-right: 1px solid #444;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-heading {
+            padding: 1rem;
+            font-size: 1.5rem;
+            background-color: #1d2124;
+            text-align: center;
+        }
+        .media-stats {
+            padding: 0.5rem 1rem;
+            background-color: #1d2124;
+            border-bottom: 1px solid #444;
+            font-size: 0.85rem;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .stat-label {
+            color: #adb5bd;
+        }
+        .stat-value {
+            color: #fff;
+            font-weight: bold;
+        }
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background-color: #343a40;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        .progress-bar-fill.poster {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+        .progress-bar-fill.logo {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        }
+        .progress-bar-fill.backdrop {
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+        }
+        .sidebar-section {
+            padding: 1rem;
+            border-bottom: 1px solid #444;
+        }
+        .sidebar-section h6 {
+            font-size: 0.9rem;
+            color: #adb5bd;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+        .list-group-item {
+            background-color: #212529;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+        }
+        .list-group-item:hover {
+            background-color: #343a40;
+        }
+        .list-group-item.active {
+            background-color: #007bff;
+        }
+        #page-content-wrapper {
+            flex-grow: 1;
+            margin-left: 250px;
+            padding: 20px;
+        }
+        .content-area {
+            padding: 0;
+        }
+        .movie-grid {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .movie-card {
+            flex: 0 0 16.66%;
+            max-width: 16.66%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .movie-card-inner {
+            position: relative;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            transition: border-color 0.2s;
+        }
+        .movie-card-inner:hover {
+            border-color: #007bff;
+        }
+        .movie-card-inner:hover .card-actions {
+            opacity: 1;
+        }
+        .card-actions {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            right: 5px;
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 10;
+        }
+        .card-action-btn {
+            flex: 1;
+            padding: 6px 4px;
+            font-size: 0.65rem;
+            line-height: 1.2;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: rgba(0, 123, 255, 0.9);
+            color: white;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+        .card-action-btn:hover {
+            background-color: rgba(0, 123, 255, 1);
+        }
+        .movie-card img {
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .movie-card h5 {
+            font-size: 0.9rem;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .artwork-indicators {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            display: flex;
+            gap: 3px;
+            z-index: 5;
+        }
+        .artwork-indicator {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            background-color: rgba(0,0,0,0.7);
+        }
+        .artwork-indicator.has {
+            background-color: #28a745;
+        }
+        .artwork-indicator.missing {
+            background-color: #ffc107;
+            cursor: pointer;
+        }
+        .artwork-indicator.missing:hover {
+            background-color: #e0a800;
+            transform: scale(1.1);
+        }
+        .artwork-indicator.unavailable {
+            background-color: #dc3545;
+        }
+        .artwork-display {
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            background-size: cover;
+            background-position: center;
+        }
+        .poster-display {
+            height: 450px;
+        }
+        .logo-display {
+            height: 150px;
+        }
+        .backdrop-display {
+            height: 200px;
+        }
+        .placeholder {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body>
+<div id="wrapper">
+    <!-- Sidebar -->
+    <div class="bg-dark border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">Media Collection</div>
+
+        <!-- Media Statistics -->
+        <div class="media-stats">
+            <div class="stat-item">
+                <span class="stat-label">Total Items:</span>
+                <span class="stat-value" id="totalCount">{{ total_media }}</span>
+            </div>
+            {% for artwork_type, config in artwork_types.items() %}
+            <div style="margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 2px;">
+                    <span style="color: #adb5bd;">{{ config.emoji }} {{ config.name }}s</span>
+                    <span style="color: #fff;" id="{{ artwork_type }}Percent">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill {{ artwork_type }}" id="{{ artwork_type }}Progress" style="width: 0%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Media Type Section -->
+        <div class="sidebar-section">
+            <h6>Media Type</h6>
+            <div class="list-group list-group-flush">
+                <a href="/" class="list-group-item {% if media_type == 'movie' %}active{% endif %}">📁 Movies</a>
+                <a href="/tv" class="list-group-item {% if media_type == 'tv' %}active{% endif %}">📺 TV Shows</a>
+            </div>
+        </div>
+
+        <!-- View Artwork Section -->
+        <div class="sidebar-section">
+            <h6>View Artwork</h6>
+            <div class="list-group list-group-flush">
+                {% for artwork_type, config in artwork_types.items() %}
+                <div class="list-group-item {% if loop.first %}active{% endif %}" data-artwork-type="{{ artwork_type }}">
+                    {{ config.emoji }} {{ config.name }}s
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Legend Section -->
+        <div class="sidebar-section">
+            <h6>Status Legend</h6>
+            <div style="font-size: 0.85rem; line-height: 1.8;">
+                <div>
+                    <span style="display: inline-block; width: 18px; height: 18px; background-color: #28a745; border-radius: 50%; vertical-align: middle;"></span>
+                    <span style="margin-left: 8px;">Found / Saved</span>
+                </div>
+                <div>
+                    <span style="display: inline-block; width: 18px; height: 18px; background-color: #ffc107; border-radius: 50%; vertical-align: middle; cursor: pointer;"></span>
+                    <span style="margin-left: 8px;">Missing (click to mark unavailable)</span>
+                </div>
+                <div>
+                    <span style="display: inline-block; width: 18px; height: 18px; background-color: #dc3545; border-radius: 50%; vertical-align: middle;"></span>
+                    <span style="margin-left: 8px;">Not Available</span>
+                </div>
+            </div>
+            <div style="margin-top: 0.75rem; padding: 0.5rem; background-color: rgba(0, 123, 255, 0.1); border-left: 3px solid #007bff; font-size: 0.75rem; line-height: 1.4;">
+                <strong>💡 Tip:</strong> Click any yellow indicator to mark that artwork as unavailable on TMDb.
+            </div>
+        </div>
+
+        <!-- Actions Section -->
+        <div class="sidebar-section">
+            <h6>Actions</h6>
+            <button class="btn btn-sm btn-primary btn-block" id="showMissingBtn">Show Missing</button>
+            <a href="/refresh" class="btn btn-sm btn-secondary btn-block">Refresh</a>
+        </div>
+    </div>
+
+    <!-- Main content area -->
+    <div id="page-content-wrapper">
+        <div class="content-area">
+            <h1 class="my-4">{{ media_type|title }} Collection</h1>
+            <input type="text" placeholder="Filter by title..." class="form-control mb-4" id="searchInput">
+
+            <!-- Media grid -->
+            <div class="movie-grid">
+                {% for item in media %}
+                <div class="movie-card" id="{{ item.clean_id }}"
+                     data-tmdb-id="{{ item.tmdb_id or '' }}"
+                     data-directory="{{ item.directory_name|escapejs }}">
+                    <div class="movie-card-inner">
+                        <!-- Artwork indicators -->
+                        <div class="artwork-indicators">
+                            {% for artwork_type, config in artwork_types.items() %}
+                            <div class="artwork-indicator
+                                {% if item['has_' + artwork_type] %}has
+                                {% elif item[artwork_type + '_unavailable'] %}unavailable
+                                {% else %}missing{% endif %}"
+                                 data-artwork-type="{{ artwork_type }}"
+                                 title="{{ config.name }} {% if item['has_' + artwork_type] %}Available{% elif item[artwork_type + '_unavailable'] %}Not Available{% else %}Missing{% endif %}">
+                                {{ config.emoji }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Artwork display (poster by default) -->
+                        <div class="artwork-display poster-display {% if not item.poster_thumb %}placeholder{% endif %}"
+                             {% if item.poster_thumb %}style="background-image: url('{{ item.poster_thumb }}');"{% endif %}>
+                            {% if not item.poster_thumb %}
+                                <span>No Poster</span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Search buttons (shown on hover) -->
+                        <div class="card-actions">
+                            {% for artwork_type, config in artwork_types.items() %}
+                            <button class="card-action-btn"
+                                    onclick="searchArtwork('{{ item.title|escapejs }}', '{{ item.directory_name|escapejs }}', '{{ artwork_type }}')">
+                                {{ config.emoji }}<br>{{ config.name }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <h5>{{ item.title }}</h5>
+                    <p style="font-size: 0.75rem; text-align: center; margin-top: 5px; line-height: 1.4;">
+                        <strong>Dimensions:</strong> {{ item.poster_dimensions or '-' }}<br>
+                        <strong>Date Modified:</strong> {{ item.poster_last_modified or '-' }}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const mediaType = '{{ media_type }}';
+    const artworkTypes = {{ artwork_types|tojson }};
+
+    // Calculate and update statistics
+    function updateStats() {
+        const mediaCards = document.querySelectorAll('.movie-card');
+        const total = mediaCards.length;
+        document.getElementById('totalCount').textContent = total;
+
+        // Count each artwork type
+        {% for artwork_type in artwork_types.keys() %}
+        let {{ artwork_type }}Count = 0;
+        mediaCards.forEach(card => {
+            const indicator = card.querySelector('[data-artwork-type="{{ artwork_type }}"]');
+            if (indicator && indicator.classList.contains('has')) {
+                {{ artwork_type }}Count++;
+            }
+        });
+        const {{ artwork_type }}Percent = total > 0 ? Math.round(({{ artwork_type }}Count / total) * 100) : 0;
+        document.getElementById('{{ artwork_type }}Percent').textContent = {{ artwork_type }}Percent + '%';
+        document.getElementById('{{ artwork_type }}Progress').style.width = {{ artwork_type }}Percent + '%';
+        {% endfor %}
+    }
+
+    // Initialize stats
+    updateStats();
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('keyup', function() {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll('.movie-card').forEach(card => {
+            const title = card.querySelector('h5').textContent.toLowerCase();
+            card.style.display = title.includes(query) ? 'block' : 'none';
+        });
+    });
+
+    // Show Missing filter
+    let showingMissingOnly = false;
+    document.getElementById('showMissingBtn').addEventListener('click', function() {
+        showingMissingOnly = !showingMissingOnly;
+        const mediaCards = document.querySelectorAll('.movie-card');
+
+        if (showingMissingOnly) {
+            this.textContent = 'Show All';
+            this.classList.remove('btn-primary');
+            this.classList.add('btn-warning');
+
+            mediaCards.forEach(card => {
+                const indicators = card.querySelectorAll('.artwork-indicator.missing');
+                card.style.display = indicators.length > 0 ? 'block' : 'none';
+            });
+        } else {
+            this.textContent = 'Show Missing';
+            this.classList.remove('btn-warning');
+            this.classList.add('btn-primary');
+
+            mediaCards.forEach(card => {
+                card.style.display = 'block';
+            });
+        }
+    });
+
+    // Click yellow indicators to mark as unavailable
+    document.addEventListener('DOMContentLoaded', function() {
+        attachIndicatorClickHandlers();
+    });
+
+    function attachIndicatorClickHandlers() {
+        const missingIndicators = document.querySelectorAll('.artwork-indicator.missing');
+
+        missingIndicators.forEach(indicator => {
+            indicator.addEventListener('click', function(e) {
+                e.stopPropagation();
+
+                const card = this.closest('.movie-card');
+                const tmdbId = card.dataset.tmdbId;
+                const artworkType = this.dataset.artworkType;
+
+                if (!tmdbId) {
+                    alert('No TMDb ID found for this media. Cannot mark as unavailable.');
+                    return;
+                }
+
+                // Call API to toggle unavailability
+                fetch('/api/toggle_unavailable', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tmdb_id: tmdbId,
+                        media_type: mediaType,
+                        artwork_type: artworkType
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update UI
+                        this.classList.remove('missing');
+                        this.classList.add('unavailable');
+                        this.title = artworkType.charAt(0).toUpperCase() + artworkType.slice(1) + ' Not Available on TMDb';
+                        this.style.cursor = 'default';
+
+                        showConfirmation(artworkType.charAt(0).toUpperCase() + artworkType.slice(1) + ' marked as unavailable');
+                        updateStats();
+
+                        if (showingMissingOnly) {
+                            const remainingMissing = card.querySelectorAll('.artwork-indicator.missing');
+                            if (remainingMissing.length === 0) {
+                                card.style.display = 'none';
+                            }
+                        }
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+    }
+
+    function showConfirmation(message) {
+        const confirmation = document.createElement('div');
+        confirmation.textContent = '✓ ' + message;
+        confirmation.style.cssText = `
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background-color: #dc3545; color: white; padding: 12px 24px;
+            border-radius: 8px; z-index: 2000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3); font-size: 0.9rem;
+        `;
+        document.body.appendChild(confirmation);
+        setTimeout(() => confirmation.remove(), 2000);
+    }
+
+    function searchArtwork(title, directory, artworkType) {
+        window.location.href = `/search_${mediaType}?query=${encodeURIComponent(title)}&directory=${encodeURIComponent(directory)}&artwork_type=${artworkType}`;
+    }
+</script>
+</body>
+</html>
