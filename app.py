@@ -50,12 +50,41 @@ ARTWORK_TYPES = {
     }
 }
 
-# SMB-safe directory listing helper
+# SMB-safe directory listing helper with mount recovery
+def try_wake_mount(path: str):
+    """
+    Attempt to wake up a sleeping/stuck SMB mount by accessing parent directories.
+    This can help recover from 'Resource temporarily unavailable' states.
+    """
+    try:
+        # Try to stat the path itself
+        os.stat(path)
+        app.logger.info(f"Mount wake successful for {path}")
+        return True
+    except:
+        pass
+
+    # Try parent directories up to 3 levels
+    current = path
+    for _ in range(3):
+        try:
+            parent = os.path.dirname(current)
+            if parent == current or not parent:
+                break
+            os.listdir(parent)
+            app.logger.info(f"Mount wake successful via parent {parent}")
+            return True
+        except:
+            current = parent
+
+    return False
+
 def safe_listdir(path: str, retries: int = 10, base_delay: float = 0.05):
     """
     Safely list directory contents with retry logic for SMB mounts.
     Degrades gracefully on BlockingIOError instead of raising 500 errors.
     Uses exponential backoff with cap at 5 seconds to balance responsiveness and reliability.
+    Attempts to wake stuck mounts after multiple failures.
     """
     last_exc = None
     for attempt in range(retries):
@@ -66,6 +95,12 @@ def safe_listdir(path: str, retries: int = 10, base_delay: float = 0.05):
             # Cap maximum delay at 5 seconds for better responsiveness
             delay = min(base_delay * (2 ** attempt), 5.0)
             app.logger.warning(f"BlockingIOError on {path}, attempt {attempt + 1}/{retries}, retrying in {delay:.2f}s")
+
+            # After 5 failed attempts, try to wake the mount
+            if attempt == 4:
+                app.logger.info(f"Attempting to wake mount for {path}...")
+                try_wake_mount(path)
+
             time.sleep(delay)
         except Exception as e:
             app.logger.error(f"Unexpected error listing {path}: {e}")
@@ -74,6 +109,7 @@ def safe_listdir(path: str, retries: int = 10, base_delay: float = 0.05):
     # If we've exhausted all retries, log it and return empty
     if last_exc:
         app.logger.error(f"Failed to list {path} after {retries} attempts: {last_exc}")
+        app.logger.error(f"SMB mount may be in a bad state. Consider remounting: {path}")
     return []  # degrade gracefully, never 500
 
 # SMB-safe file reading helper
@@ -450,7 +486,15 @@ def perform_background_scan(media_type='movie'):
         # Perform the scan
         media_list, count = scan_media_for_artwork(base_folders, media_type)
 
-        # Update cache
+        # Check if scan returned empty (likely SMB issue)
+        if count == 0:
+            app.logger.warning(f"Background scan returned 0 items for {media_type} - SMB mount may be unavailable")
+            # Don't overwrite cache with empty data - keep previous scan
+            with scan_cache_lock:
+                scan_cache[cache_key]['scanning'] = False
+            return
+
+        # Update cache only if we got results
         with scan_cache_lock:
             scan_cache[cache_key]['data'] = media_list
             scan_cache[cache_key]['count'] = count
