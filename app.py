@@ -555,43 +555,33 @@ def get_backdrop_thumbnails(base_folders=None):
 # Route for the main index page showing movie collection with all artwork types
 @app.route('/')
 def index():
-    # Use cached data instead of scanning on every request
-    movies, total_movies = get_cached_scan('movie')
-    last_scan = get_last_scan_time('movie')
-    scanning = is_scanning('movie')
+    # Scan on demand (like Postarr) - no background scanning
+    movies, total_movies = scan_media_for_artwork(movie_folders, 'movie')
 
     # Pass artwork types configuration to template
     return render_template('collection.html',
                          media=movies,
                          total_media=total_movies,
                          media_type='movie',
-                         artwork_types=ARTWORK_TYPES,
-                         last_scan=last_scan,
-                         scanning=scanning)
+                         artwork_types=ARTWORK_TYPES)
 
 # Route for TV shows page
 @app.route('/tv')
 def tv_shows():
-    # Use cached data instead of scanning on every request
-    tv_shows, total_tv_shows = get_cached_scan('tv')
-    last_scan = get_last_scan_time('tv')
-    scanning = is_scanning('tv')
+    # Scan on demand (like Postarr) - no background scanning
+    tv_shows, total_tv_shows = scan_media_for_artwork(tv_folders, 'tv')
 
     # Pass artwork types configuration to template
     return render_template('collection.html',
                          media=tv_shows,
                          total_media=total_tv_shows,
                          media_type='tv',
-                         artwork_types=ARTWORK_TYPES,
-                         last_scan=last_scan,
-                         scanning=scanning)
+                         artwork_types=ARTWORK_TYPES)
 
 # Route to trigger a manual refresh of media directories
 @app.route('/refresh')
 def refresh():
-    # Trigger immediate background scan for both movies and TV
-    threading.Thread(target=perform_background_scan, args=('movie',), daemon=True).start()
-    threading.Thread(target=perform_background_scan, args=('tv',), daemon=True).start()
+    # Just redirect to index - scanning happens automatically on page load
     return redirect(url_for('index'))
 
 # ============================================================================
@@ -1154,12 +1144,6 @@ def send_slack_notification(message, local_backdrop_path, backdrop_url):
 
 # Main entry point for running the Flask application
 if __name__ == '__main__':
-    # Load cached scan results from disk
-    load_scan_cache()
-
-    # Start background scanner thread
-    start_background_scanner()
-
     # Start the app, listening on all network interfaces at port 5000
     app.run(
         host="0.0.0.0",
