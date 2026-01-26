@@ -25,19 +25,20 @@
         <h4>Debug Info:</h4>
         <ul>
             <li><strong>Media Title:</strong> {{ media_title }}</li>
-            <li><strong>Backdrop Path:</strong> {{ backdrop_path }}</li>
+            <li><strong>Artwork URL:</strong> {{ artwork_url }}</li>
+            <li><strong>Artwork Type:</strong> {{ artwork_type }}</li>
             <li><strong>Content Type:</strong> {{ media_type }}</li>
             <li><strong>Directories:</strong> {{ similar_dirs }}</li>
         </ul>
     </div>
 
     <!-- Form to Submit Directory -->
-    <form action="{{ url_for('confirm_backdrop_directory') }}" method="post" id="directory-form">
+    <form action="{{ url_for('confirm_directory') }}" method="post" id="directory-form">
         <!-- Hidden inputs to pass necessary data -->
-        <input type="hidden" name="backdrop_path" value="{{ backdrop_path }}">
+        <input type="hidden" name="artwork_url" value="{{ artwork_url }}">
         <input type="hidden" name="media_title" value="{{ media_title }}">
-        <input type="hidden" name="media_type" value="{{ media_type }}">
-        <input type="hidden" name="tmdb_id" value="{{ tmdb_id }}">
+        <input type="hidden" name="content_type" value="{{ media_type }}">
+        <input type="hidden" name="artwork_type" value="{{ artwork_type }}">
 
         <!-- Directory Selection -->
         {% for directory in similar_dirs %}
@@ -48,7 +49,7 @@
         {% endfor %}
 
         <!-- Submit Button -->
-        <button type="submit">Save Backdrop</button>
+        <button type="submit">Save {{ artwork_type|title }}</button>
     </form>
 
     <!-- JavaScript for Debugging and Submission -->
@@ -58,9 +59,10 @@
         // Debugging: Log form submission
         form.addEventListener('submit', function(event) {
             console.log('Form is submitting...');
-            console.log('Backdrop Path:', document.querySelector('input[name="backdrop_path"]').value);
+            console.log('Artwork URL:', document.querySelector('input[name="artwork_url"]').value);
             console.log('Media Title:', document.querySelector('input[name="media_title"]').value);
-            console.log('Media Type:', document.querySelector('input[name="media_type"]').value);
+            console.log('Content Type:', document.querySelector('input[name="content_type"]').value);
+            console.log('Artwork Type:', document.querySelector('input[name="artwork_type"]').value);
             console.log('Selected Directory:', document.querySelector('input[name="selected_directory"]:checked')?.value);
         });
 

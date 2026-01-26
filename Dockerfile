@@ -35,5 +35,5 @@ RUN chmod -R 755 /app && \
 # Expose the port that Flask runs on
 EXPOSE 5000
 
-# Define the command to run the Flask app
-CMD ["python", "app.py"]
+# Define the command to run the Flask app with unbuffered output
+CMD ["python", "-u", "app.py"]

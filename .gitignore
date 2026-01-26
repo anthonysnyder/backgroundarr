@@ -59,3 +59,13 @@ tmdb_directory_mapping.json
 
 # Test folders
 test_media/
+
+# Local cache and data
+artwork_cache/
+unavailable_artwork.json
+
+# LaunchAgent plist with API keys
+com.mediarr.app.plist
+
+# Mockup files
+mockup-*.html

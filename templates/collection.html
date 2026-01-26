@@ -229,7 +229,7 @@
             {% for artwork_type, config in artwork_types.items() %}
             <div style="margin-bottom: 0.75rem;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 2px;">
-                    <span style="color: #adb5bd;">{{ config.emoji }} {{ config.name }}s</span>
+                    <span style="color: #adb5bd;">{{ config.emoji }} {{ config.name }}</span>
                     <span style="color: #fff;" id="{{ artwork_type }}Percent">0%</span>
                 </div>
                 <div class="progress-bar-container">
@@ -252,11 +252,36 @@
         <div class="sidebar-section">
             <h6>View Artwork</h6>
             <div class="list-group list-group-flush">
-                {% for artwork_type, config in artwork_types.items() %}
-                <div class="list-group-item {% if loop.first %}active{% endif %}" data-artwork-type="{{ artwork_type }}">
-                    {{ config.emoji }} {{ config.name }}s
-                </div>
+                {% for at, config in artwork_types.items() %}
+                <a href="/{{ 'movies' if media_type == 'movie' else media_type }}/{{ at }}"
+                   class="list-group-item {% if artwork_type == at %}active{% endif %}"
+                   data-artwork-type="{{ at }}">
+                    {{ config.emoji }} {{ config.name }}
+                </a>
                 {% endfor %}
+            </div>
+        </div>
+
+        <!-- How to Use Section -->
+        <div class="sidebar-section">
+            <h6>How to Use</h6>
+            <div style="font-size: 0.75rem; line-height: 1.6; color: #adb5bd;">
+                <div style="margin-bottom: 0.75rem;">
+                    <strong style="color: #fff;">1. Browse Your Media</strong><br>
+                    Switch between Movies and TV Shows, then view different artwork types (Posters, Logos, Backdrops).
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    <strong style="color: #fff;">2. Download Missing Artwork</strong><br>
+                    Hover over any card and click the artwork button (📄 🎨 🖼️) to search TMDb and download artwork.
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    <strong style="color: #fff;">3. Mark Unavailable</strong><br>
+                    Click yellow 🟡 indicators if artwork doesn't exist on TMDb to hide them from Missing filter.
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    <strong style="color: #fff;">4. Refresh Cache</strong><br>
+                    After downloading new artwork outside the app, click "Refresh" to update the cache.
+                </div>
             </div>
         </div>
 
@@ -270,30 +295,34 @@
                 </div>
                 <div>
                     <span style="display: inline-block; width: 18px; height: 18px; background-color: #ffc107; border-radius: 50%; vertical-align: middle; cursor: pointer;"></span>
-                    <span style="margin-left: 8px;">Missing (click to mark unavailable)</span>
+                    <span style="margin-left: 8px;">Missing (click to mark)</span>
                 </div>
                 <div>
                     <span style="display: inline-block; width: 18px; height: 18px; background-color: #dc3545; border-radius: 50%; vertical-align: middle;"></span>
                     <span style="margin-left: 8px;">Not Available</span>
                 </div>
             </div>
-            <div style="margin-top: 0.75rem; padding: 0.5rem; background-color: rgba(0, 123, 255, 0.1); border-left: 3px solid #007bff; font-size: 0.75rem; line-height: 1.4;">
-                <strong>💡 Tip:</strong> Click any yellow indicator to mark that artwork as unavailable on TMDb.
-            </div>
         </div>
 
         <!-- Actions Section -->
         <div class="sidebar-section">
             <h6>Actions</h6>
-            <button class="btn btn-sm btn-primary btn-block" id="showMissingBtn">Show Missing</button>
-            <a href="/refresh" class="btn btn-sm btn-secondary btn-block">Refresh</a>
+            <button class="btn btn-sm btn-primary btn-block" id="showMissingBtn" style="margin-bottom: 0.5rem;">
+                Show Missing Logos
+            </button>
+            <a href="/refresh" class="btn btn-sm btn-secondary btn-block" style="margin-bottom: 0.5rem;">
+                Refresh Cache
+            </a>
+            <div style="font-size: 0.7rem; color: #6c757d; margin-top: 0.5rem; line-height: 1.3;">
+                Note: Refresh scans all directories and rebuilds the cache. This takes a few moments but ensures new artwork appears.
+            </div>
         </div>
     </div>
 
     <!-- Main content area -->
     <div id="page-content-wrapper">
         <div class="content-area">
-            <h1 class="my-4">{{ media_type|title }} Collection</h1>
+            <h1 class="my-4">{{ media_type|title }} Collection - {{ artwork_types[artwork_type].name }}</h1>
             <input type="text" placeholder="Filter by title..." class="form-control mb-4" id="searchInput">
 
             <!-- Media grid -->
@@ -301,35 +330,38 @@
                 {% for item in media %}
                 <div class="movie-card" id="{{ item.clean_id }}"
                      data-tmdb-id="{{ item.tmdb_id or '' }}"
-                     data-directory="{{ item.directory_name|escapejs }}">
+                     data-directory="{{ item.title|escape }}">
                     <div class="movie-card-inner">
                         <!-- Artwork indicators -->
                         <div class="artwork-indicators">
-                            {% for artwork_type, config in artwork_types.items() %}
+                            {% for art_type, config in artwork_types.items() %}
                             <div class="artwork-indicator
-                                {% if item['has_' + artwork_type] %}has
-                                {% elif item[artwork_type + '_unavailable'] %}unavailable
+                                {% if item['has_' + art_type] %}has
+                                {% elif item[art_type + '_unavailable'] %}unavailable
                                 {% else %}missing{% endif %}"
-                                 data-artwork-type="{{ artwork_type }}"
-                                 title="{{ config.name }} {% if item['has_' + artwork_type] %}Available{% elif item[artwork_type + '_unavailable'] %}Not Available{% else %}Missing{% endif %}">
+                                 data-artwork-type="{{ art_type }}"
+                                 title="{{ config.name }} {% if item['has_' + art_type] %}Available{% elif item[art_type + '_unavailable'] %}Not Available{% else %}Missing{% endif %}">
                                 {{ config.emoji }}
                             </div>
                             {% endfor %}
                         </div>
 
-                        <!-- Artwork display (poster by default) -->
-                        <div class="artwork-display poster-display {% if not item.poster_thumb %}placeholder{% endif %}"
-                             {% if item.poster_thumb %}style="background-image: url('{{ item.poster_thumb }}');"{% endif %}>
-                            {% if not item.poster_thumb %}
-                                <span>No Poster</span>
+                        <!-- Artwork display (varies based on current artwork_type) -->
+                        {% set display_class = artwork_type + '-display' %}
+                        {% set has_artwork = item['has_artwork'] %}
+                        {% set artwork_thumb_url = item.artwork_thumb %}
+                        <div class="artwork-display {{ display_class }} {% if not has_artwork %}placeholder{% endif %}"
+                             {% if artwork_thumb_url %}style="background-image: url('{{ artwork_thumb_url }}');"{% endif %}>
+                            {% if not has_artwork %}
+                                <span>No {{ artwork_types[artwork_type].name[:-1] }}</span>
                             {% endif %}
                         </div>
 
                         <!-- Search buttons (shown on hover) -->
                         <div class="card-actions">
-                            {% for artwork_type, config in artwork_types.items() %}
+                            {% for art_type, config in artwork_types.items() %}
                             <button class="card-action-btn"
-                                    onclick="searchArtwork('{{ item.title|escapejs }}', '{{ item.directory_name|escapejs }}', '{{ artwork_type }}')">
+                                    onclick="searchArtwork('{{ item.title|replace("'", "\\'") }}', '{{ item.title|replace("'", "\\'") }}', '{{ art_type }}')">
                                 {{ config.emoji }}<br>{{ config.name }}
                             </button>
                             {% endfor %}
@@ -337,8 +369,8 @@
                     </div>
                     <h5>{{ item.title }}</h5>
                     <p style="font-size: 0.75rem; text-align: center; margin-top: 5px; line-height: 1.4;">
-                        <strong>Dimensions:</strong> {{ item.poster_dimensions or '-' }}<br>
-                        <strong>Date Modified:</strong> {{ item.poster_last_modified or '-' }}
+                        <strong>Dimensions:</strong> {{ item.artwork_dimensions or '-' }}<br>
+                        <strong>Date Modified:</strong> {{ item.artwork_last_modified or '-' }}
                     </p>
                 </div>
                 {% endfor %}
@@ -347,9 +379,83 @@
     </div>
 </div>
 
+<!-- Toast Container for Notifications -->
+<div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;"></div>
+
 <script>
     const mediaType = '{{ media_type }}';
     const artworkTypes = {{ artwork_types|tojson }};
+    let currentArtworkFilter = '{{ artwork_type }}'; // Initialize from server
+    let showingMissingOnly = false;
+
+    // Function to show toast notifications
+    function showToast(message, type = 'success') {
+        const toastContainer = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.style.cssText = `
+            background-color: ${type === 'success' ? '#28a745' : '#dc3545'};
+            color: white;
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-size: 0.9rem;
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        `;
+
+        const icon = type === 'success' ? '✓' : '✗';
+        toast.innerHTML = `
+            <span><strong>${icon}</strong> ${message}</span>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer; margin-left: 10px; padding: 0 5px;">&times;</button>
+        `;
+
+        toastContainer.appendChild(toast);
+
+        // Auto-dismiss after 4 seconds
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-in';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    // Add CSS animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Show flash messages as toasts on page load
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                showToast('{{ message|replace("'", "\\'") }}', '{{ category }}');
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
     // Calculate and update statistics
     function updateStats() {
@@ -383,10 +489,6 @@
             card.style.display = title.includes(query) ? 'block' : 'none';
         });
     });
-
-    // Track current artwork type filter and missing state
-    let currentArtworkFilter = 'poster'; // Default to poster
-    let showingMissingOnly = false;
 
     // Update button text based on current artwork filter
     function updateShowMissingButtonText() {
@@ -431,35 +533,21 @@
         updateShowMissingButtonText();
     });
 
-    // Handle artwork type selection in sidebar
-    document.querySelectorAll('[data-artwork-type]').forEach(item => {
-        item.addEventListener('click', function() {
-            // Update active state
-            document.querySelectorAll('[data-artwork-type]').forEach(i => i.classList.remove('active'));
-            this.classList.add('active');
-
-            // Update current filter
-            currentArtworkFilter = this.dataset.artworkType;
-
-            // Update button text
-            updateShowMissingButtonText();
-
-            // If currently showing missing, re-filter with new artwork type
-            if (showingMissingOnly) {
-                const mediaCards = document.querySelectorAll('.movie-card');
-                mediaCards.forEach(card => {
-                    const indicator = card.querySelector(`.artwork-indicator[data-artwork-type="${currentArtworkFilter}"]`);
-                    const isMissing = indicator && indicator.classList.contains('missing');
-                    card.style.display = isMissing ? 'block' : 'none';
-                });
-            }
-        });
-    });
-
     // Initialize button text on page load
     document.addEventListener('DOMContentLoaded', function() {
         updateShowMissingButtonText();
         attachIndicatorClickHandlers();
+
+        // Check if we should automatically show missing items
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('show_missing') === 'true') {
+            // Trigger the show missing button click
+            document.getElementById('showMissingBtn').click();
+
+            // Clean up the URL parameter to avoid re-triggering on reload
+            const newUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, '', newUrl);
+        }
     });
 
     function attachIndicatorClickHandlers() {
@@ -469,22 +557,21 @@
             indicator.addEventListener('click', function(e) {
                 e.stopPropagation();
 
-                const card = this.closest('.movie-card');
-                const tmdbId = card.dataset.tmdbId;
                 const artworkType = this.dataset.artworkType;
+                const card = this.closest('.movie-card');
+                const directory = card.dataset.directory;
 
-                if (!tmdbId) {
-                    alert('No TMDb ID found for this media. Cannot mark as unavailable.');
+                if (!directory) {
+                    showToast('Cannot identify this media', 'error');
                     return;
                 }
 
-                // Call API to toggle unavailability
+                // Call API to persist unavailability
                 fetch('/api/toggle_unavailable', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        tmdb_id: tmdbId,
-                        media_type: mediaType,
+                        directory: directory,
                         artwork_type: artworkType
                     })
                 })
@@ -494,10 +581,10 @@
                         // Update UI
                         this.classList.remove('missing');
                         this.classList.add('unavailable');
-                        this.title = artworkType.charAt(0).toUpperCase() + artworkType.slice(1) + ' Not Available on TMDb';
+                        this.title = artworkType.charAt(0).toUpperCase() + artworkType.slice(1) + ' Not Available';
                         this.style.cursor = 'default';
 
-                        showConfirmation(artworkType.charAt(0).toUpperCase() + artworkType.slice(1) + ' marked as unavailable');
+                        showToast(artworkType.charAt(0).toUpperCase() + artworkType.slice(1) + ' marked as unavailable', 'success');
                         updateStats();
 
                         if (showingMissingOnly) {
@@ -506,9 +593,14 @@
                                 card.style.display = 'none';
                             }
                         }
+                    } else {
+                        showToast('Failed to mark as unavailable: ' + (data.error || 'Unknown error'), 'error');
                     }
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('Error marking as unavailable', 'error');
+                });
             });
         });
     }
@@ -533,5 +625,9 @@
         window.location.href = `/search_${mediaType}?query=${encodeURIComponent(cleanTitle)}&directory=${encodeURIComponent(directory)}&artwork_type=${artworkType}`;
     }
 </script>
+
+<!-- jQuery and Bootstrap JS for alert dismissible functionality -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

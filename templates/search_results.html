@@ -47,13 +47,20 @@
         {% for result in results %}
         <div class="col-md-3 mb-4">
             <div class="card">
-                <!-- Display the backdrop image if available -->
-                {% if result.backdrop_url %}
-                <img src="{{ result.backdrop_url }}" class="card-img-top" alt="{{ result.title or result.name }}">
+                <!-- Display the appropriate artwork image based on artwork_type -->
+                {% if artwork_type == 'poster' and result.poster_path %}
+                <img src="https://image.tmdb.org/t/p/w500{{ result.poster_path }}" class="card-img-top" alt="{{ result.title or result.name }}">
+                {% elif artwork_type == 'backdrop' and result.backdrop_path %}
+                <img src="https://image.tmdb.org/t/p/w500{{ result.backdrop_path }}" class="card-img-top" alt="{{ result.title or result.name }}">
+                {% elif artwork_type == 'logo' %}
+                <!-- Logos require a separate API call, show placeholder for now -->
+                <div class="card-img-top d-flex align-items-center justify-content-center" style="height: 300px; background-color: #6c757d;">
+                    <span>Click to View Logos</span>
+                </div>
                 {% else %}
                 <!-- Placeholder for items without an image -->
                 <div class="card-img-top d-flex align-items-center justify-content-center" style="height: 300px; background-color: #6c757d;">
-                    <span>No Backdrop Available</span>
+                    <span>No {{ artwork_type|title }} Available</span>
                 </div>
                 {% endif %}
                 <div class="card-body text-center">
@@ -68,8 +75,7 @@
                         {% endif %}
                     </p>
                     <!-- Button to select the result and proceed to artwork selection -->
-                    <form action="{% if content_type == 'tv' %}{{ url_for('select_tv_artwork', tv_id=result.id, artwork_type=artwork_type) }}{% else %}{{ url_for('select_movie_artwork', movie_id=result.id, artwork_type=artwork_type) }}{% endif %}" method="GET">
-                        <input type="hidden" name="directory" value="{{ directory }}">
+                    <form action="{% if content_type == 'tv' %}{{ url_for('select_tv', tv_id=result.id, artwork_type=artwork_type|default('poster'), directory=directory) }}{% else %}{{ url_for('select_movie', movie_id=result.id, artwork_type=artwork_type|default('poster'), directory=directory) }}{% endif %}" method="GET">
                         <button type="submit" class="btn btn-primary">Select</button>
                     </form>
                 </div>

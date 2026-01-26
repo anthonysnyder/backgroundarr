@@ -83,7 +83,13 @@
         .artwork-image-container {
             position: relative;
             width: 100%;
-            padding-top: {{ (artwork_config.aspect_ratio[1] / artwork_config.aspect_ratio[0] * 100) }}%;
+            {% if artwork_type == 'poster' %}
+            padding-top: 150%; /* 2:3 aspect ratio for posters */
+            {% elif artwork_type == 'backdrop' %}
+            padding-top: 56.25%; /* 16:9 aspect ratio for backdrops */
+            {% else %}
+            padding-top: 50%; /* Generic aspect ratio for logos */
+            {% endif %}
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             align-items: center;
@@ -166,7 +172,7 @@
                     <span style="color: #adb5bd; margin-left: 1rem;">TMDb ID: {{ tmdb_id }}</span>
                 </div>
                 <div>
-                    <span style="color: #28a745; font-weight: bold;">{{ artworks|length }} {{ artwork_config.name|lower }}s available</span>
+                    <span style="color: #28a745; font-weight: bold;">{{ artwork|length }} {{ artwork_config.name|lower }} available</span>
                 </div>
             </div>
         </div>
@@ -194,26 +200,28 @@
         {% endif %}
 
         <div class="artwork-grid" id="artworkGrid">
-            {% for artwork in artworks %}
+            {% for item in artwork %}
             <div class="artwork-card"
-                 data-language="{{ artwork.iso_639_1 or 'none' }}"
-                 data-width="{{ artwork.width }}"
-                 data-height="{{ artwork.height }}"
-                 data-rating="{{ artwork.vote_average }}"
-                 onclick="downloadArtwork(this, '{{ artwork.file_path }}')">
+                 data-language="{{ item.language or 'none' }}"
+                 data-width="{{ item.size.split('x')[0] }}"
+                 data-height="{{ item.size.split('x')[1] }}"
+                 data-rating="0"
+                 onclick="downloadArtwork(this, '{{ item.url }}')">
                 <div class="artwork-image-container">
-                    <img class="artwork-image" src="{{ artwork.url }}" alt="{{ artwork_config.name }}">
+                    <img class="artwork-image" src="{{ item.url }}" alt="{{ artwork_config.name }}">
                 </div>
                 <div class="artwork-info-section">
                     <div class="artwork-dimensions">
-                        <strong>{{ artwork.width }} × {{ artwork.height }}</strong>
-                        {% if artwork.iso_639_1 %}
-                        <span class="language-badge">{{ artwork.iso_639_1|upper }}</span>
+                        <strong>{{ item.size }}</strong>
+                        {% if item.language and item.language != 'N/A' %}
+                        <span class="language-badge">{{ item.language|upper }}</span>
                         {% else %}
                         <span class="language-badge" style="background-color: #6c757d;">None</span>
                         {% endif %}
                     </div>
-                    {% set max_dimension = [artwork.width, artwork.height]|max %}
+                    {% set width = item.size.split('x')[0]|int %}
+                    {% set height = item.size.split('x')[1]|int %}
+                    {% set max_dimension = [width, height]|max %}
                     {% if max_dimension >= 2000 %}
                     <span class="artwork-quality quality-high">HIGH QUALITY</span>
                     {% elif max_dimension >= 1000 %}
@@ -221,10 +229,6 @@
                     {% else %}
                     <span class="artwork-quality quality-low">LOW QUALITY ⚠️</span>
                     {% endif %}
-                    <div class="artwork-meta">
-                        <div>⭐ Rating: {{ "%.1f"|format(artwork.vote_average) }}/10 ({{ artwork.vote_count }} votes)</div>
-                        <div>Aspect ratio: {{ artwork.aspect_ratio|round(2) }}</div>
-                    </div>
                 </div>
             </div>
             {% endfor %}
@@ -233,7 +237,7 @@
     </div>
 
     <script>
-        function downloadArtwork(card, artworkPath) {
+        function downloadArtwork(card, artworkUrl) {
             // Add downloading class for visual feedback
             card.classList.add('downloading');
 
@@ -246,15 +250,13 @@
             // Create a form and submit it to download the artwork
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = '{{ url_for("save_artwork") }}';
+            form.action = '{{ url_for("select_artwork") }}';
 
             const fields = {
-                'artwork_path': '{{ artwork_base_url }}' + artworkPath,
+                'artwork_url': artworkUrl,
                 'media_title': '{{ media_title }}',
-                'media_type': '{{ media_type }}',
-                'artwork_type': '{{ artwork_type }}',
-                'tmdb_id': '{{ tmdb_id }}',
-                'directory': '{{ directory }}'
+                'media_type': '{{ content_type }}',
+                'artwork_type': '{{ artwork_type }}'
             };
 
             for (const [key, value] of Object.entries(fields)) {
